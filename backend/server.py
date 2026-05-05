@@ -557,7 +557,11 @@ async def payment_status(session_id: str, request: Request, current_user: dict =
     host_url = str(request.base_url).rstrip("/")
     webhook_url = f"{host_url}/api/webhook/stripe"
     stripe = StripeCheckout(api_key=STRIPE_API_KEY, webhook_url=webhook_url)
-    status = await stripe.get_checkout_status(session_id)
+    try:
+        status = await stripe.get_checkout_status(session_id)
+    except Exception as e:
+        logger.error(f"Stripe status fetch failed for {session_id}: {e}")
+        return {"payment_status": txn.get("payment_status", "pending"), "status": txn.get("status", "open")}
 
     update = {"status": status.status, "payment_status": status.payment_status}
     await db.payment_transactions.update_one({"session_id": session_id}, {"$set": update})
