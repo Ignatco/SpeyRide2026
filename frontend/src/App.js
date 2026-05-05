@@ -1,54 +1,61 @@
-import { useEffect } from "react";
-import "@/App.css";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
-import axios from "axios";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { Toaster } from "sonner";
+import { AuthProvider, useAuth } from "@/context/AuthContext";
+import Landing from "@/pages/Landing";
+import Login from "@/pages/Login";
+import Onboarding from "@/pages/Onboarding";
+import RiderHome from "@/pages/RiderHome";
+import RiderRide from "@/pages/RiderRide";
+import RiderHistory from "@/pages/RiderHistory";
+import DriverHome from "@/pages/DriverHome";
+import DriverRide from "@/pages/DriverRide";
+import DriverEarnings from "@/pages/DriverEarnings";
+import { Loader2 } from "lucide-react";
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
-const API = `${BACKEND_URL}/api`;
+function Protected({ role, children }) {
+  const { user, loading } = useAuth();
+  if (loading) return <SplashLoader />;
+  if (!user) return <Navigate to="/login" replace />;
+  if (!user.role || !user.name) return <Navigate to="/onboarding" replace />;
+  if (role && user.role !== role) {
+    return <Navigate to={user.role === "driver" ? "/driver" : "/rider"} replace />;
+  }
+  return children;
+}
 
-const Home = () => {
-  const helloWorldApi = async () => {
-    try {
-      const response = await axios.get(`${API}/`);
-      console.log(response.data.message);
-    } catch (e) {
-      console.error(e, `errored out requesting / api`);
-    }
-  };
-
-  useEffect(() => {
-    helloWorldApi();
-  }, []);
-
+function SplashLoader() {
   return (
-    <div>
-      <header className="App-header">
-        <a
-          className="App-link"
-          href="https://emergent.sh"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <img src="https://avatars.githubusercontent.com/in/1201222?s=120&u=2686cf91179bbafbc7a71bfbc43004cf9ae1acea&v=4" />
-        </a>
-        <p className="mt-5">Building something incredible ~!</p>
-      </header>
-    </div>
-  );
-};
-
-function App() {
-  return (
-    <div className="App">
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Home />}>
-            <Route index element={<Home />} />
-          </Route>
-        </Routes>
-      </BrowserRouter>
+    <div className="min-h-screen flex items-center justify-center bg-white">
+      <Loader2 className="w-7 h-7 animate-spin text-[#002FA7]" />
     </div>
   );
 }
 
-export default App;
+function AppRoutes() {
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<Landing />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/onboarding" element={<Onboarding />} />
+        <Route path="/rider" element={<Protected role="rider"><RiderHome /></Protected>} />
+        <Route path="/rider/ride/:id" element={<Protected role="rider"><RiderRide /></Protected>} />
+        <Route path="/rider/history" element={<Protected role="rider"><RiderHistory /></Protected>} />
+        <Route path="/driver" element={<Protected role="driver"><DriverHome /></Protected>} />
+        <Route path="/driver/ride/:id" element={<Protected role="driver"><DriverRide /></Protected>} />
+        <Route path="/driver/earnings" element={<Protected role="driver"><DriverEarnings /></Protected>} />
+        <Route path="/driver/history" element={<Protected role="driver"><DriverEarnings /></Protected>} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </BrowserRouter>
+  );
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <AppRoutes />
+      <Toaster position="top-center" richColors closeButton />
+    </AuthProvider>
+  );
+}
