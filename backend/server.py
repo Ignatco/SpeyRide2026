@@ -235,6 +235,8 @@ async def send_otp(req: SendOTPReq):
             client.verify.v2.services(TWILIO_VERIFY_SERVICE_SID).verifications.create(
                 to=phone, channel="sms"
             )
+            # Clear any stale dev OTP from prior failed attempts so verify uses Twilio path
+            _dev_otps.pop(phone, None)
             return {"sent": True, "mode": "twilio"}
         except Exception as e:
             logger.error(f"Twilio send failed: {e}; falling back to dev OTP")
@@ -250,7 +252,10 @@ async def verify_otp(req: VerifyOTPReq):
     code = req.code.strip()
 
     verified = False
-    if _twilio_ready() and phone not in _dev_otps:
+    twilio_attempted = False
+    # Always try Twilio first when configured
+    if _twilio_ready():
+        twilio_attempted = True
         try:
             client = _twilio_client()
             check = client.verify.v2.services(TWILIO_VERIFY_SERVICE_SID).verification_checks.create(
@@ -259,11 +264,12 @@ async def verify_otp(req: VerifyOTPReq):
             verified = check.status == "approved"
         except Exception as e:
             logger.error(f"Twilio verify failed: {e}")
-            raise HTTPException(400, "OTP verification failed")
-    else:
+            # fall through to dev OTP check
+    # Dev OTP fallback (covers: Twilio not configured, Twilio rejected, or transient error)
+    if not verified:
         expected = _dev_otps.get(phone)
-        verified = expected is not None and expected == code
-        if verified:
+        if expected is not None and expected == code:
+            verified = True
             _dev_otps.pop(phone, None)
 
     if not verified:
