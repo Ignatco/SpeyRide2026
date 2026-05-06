@@ -223,11 +223,87 @@ def _serialize(doc: dict) -> dict:
 # In-memory dev OTP store {phone: code}
 _dev_otps: Dict[str, str] = {}
 
+# ---- Rate limiting state (in-memory, per-process) ----
+# Send: per phone & per IP
+_send_history: Dict[str, List[float]] = {}      # key="phone:+1..." or "ip:1.2.3.4" -> list of unix ts
+_send_cooldown: Dict[str, float] = {}           # phone -> next-allowed unix ts
+# Verify attempts: per phone (lockout on too many wrong codes)
+_verify_attempts: Dict[str, List[float]] = {}   # phone -> list of failed-attempt timestamps
+_verify_lockout: Dict[str, float] = {}          # phone -> locked-until unix ts
+
+SEND_COOLDOWN_SEC = 30          # min seconds between consecutive sends to same phone
+SEND_PHONE_HOURLY = 5           # max sends per phone per hour
+SEND_IP_HOURLY = 15             # max sends per IP per hour
+VERIFY_MAX_FAILS = 5            # wrong codes before lockout
+VERIFY_FAIL_WINDOW_SEC = 15 * 60  # rolling window for failed attempts
+VERIFY_LOCKOUT_SEC = 15 * 60    # how long to lock out
+
+def _now() -> float:
+    return datetime.now(timezone.utc).timestamp()
+
+def _prune(arr: List[float], window: float, now: float) -> List[float]:
+    return [t for t in arr if now - t < window]
+
+def _client_ip(request: Request) -> str:
+    fwd = request.headers.get("x-forwarded-for")
+    if fwd:
+        return fwd.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+def _check_send_limits(phone: str, ip: str):
+    now = _now()
+    # Cooldown
+    nxt = _send_cooldown.get(phone, 0)
+    if now < nxt:
+        wait = int(nxt - now)
+        raise HTTPException(429, f"Please wait {wait}s before requesting another code")
+    # Per-phone hourly
+    p_key = f"phone:{phone}"
+    p_hist = _prune(_send_history.get(p_key, []), 3600, now)
+    if len(p_hist) >= SEND_PHONE_HOURLY:
+        raise HTTPException(429, "Too many code requests for this phone. Try again in an hour.")
+    # Per-IP hourly
+    i_key = f"ip:{ip}"
+    i_hist = _prune(_send_history.get(i_key, []), 3600, now)
+    if len(i_hist) >= SEND_IP_HOURLY:
+        raise HTTPException(429, "Too many code requests from this device. Try again in an hour.")
+    # Record
+    p_hist.append(now)
+    i_hist.append(now)
+    _send_history[p_key] = p_hist
+    _send_history[i_key] = i_hist
+    _send_cooldown[phone] = now + SEND_COOLDOWN_SEC
+
+def _check_verify_lockout(phone: str):
+    now = _now()
+    locked = _verify_lockout.get(phone, 0)
+    if now < locked:
+        wait = int((locked - now) / 60) + 1
+        raise HTTPException(429, f"Too many wrong codes. Locked for {wait} more minute(s).")
+
+def _record_verify_failure(phone: str):
+    now = _now()
+    arr = _prune(_verify_attempts.get(phone, []), VERIFY_FAIL_WINDOW_SEC, now)
+    arr.append(now)
+    _verify_attempts[phone] = arr
+    if len(arr) >= VERIFY_MAX_FAILS:
+        _verify_lockout[phone] = now + VERIFY_LOCKOUT_SEC
+        _verify_attempts[phone] = []  # reset window after locking
+
+def _record_verify_success(phone: str):
+    _verify_attempts.pop(phone, None)
+    _verify_lockout.pop(phone, None)
+    _send_cooldown.pop(phone, None)
+
 @api_router.post("/auth/send-otp")
-async def send_otp(req: SendOTPReq):
+async def send_otp(req: SendOTPReq, request: Request):
     phone = req.phone.strip()
     if not phone.startswith("+") or len(phone) < 8:
         raise HTTPException(400, "Phone must be in E.164 format e.g. +14155552671")
+
+    ip = _client_ip(request)
+    _check_send_limits(phone, ip)
+    _check_verify_lockout(phone)
 
     if _twilio_ready():
         try:
@@ -250,12 +326,11 @@ async def send_otp(req: SendOTPReq):
 async def verify_otp(req: VerifyOTPReq):
     phone = req.phone.strip()
     code = req.code.strip()
+    _check_verify_lockout(phone)
 
     verified = False
-    twilio_attempted = False
     # Always try Twilio first when configured
     if _twilio_ready():
-        twilio_attempted = True
         try:
             client = _twilio_client()
             check = client.verify.v2.services(TWILIO_VERIFY_SERVICE_SID).verification_checks.create(
@@ -273,7 +348,10 @@ async def verify_otp(req: VerifyOTPReq):
             _dev_otps.pop(phone, None)
 
     if not verified:
+        _record_verify_failure(phone)
         raise HTTPException(400, "Invalid OTP")
+
+    _record_verify_success(phone)
 
     # Find or create user (without role yet)
     user = await db.users.find_one({"phone": phone}, {"_id": 0})
