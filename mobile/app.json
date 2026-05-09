@@ -4,11 +4,9 @@
     "slug": "spey-ride",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
     "scheme": "speyride",
     "userInterfaceStyle": "automatic",
     "splash": {
-      "image": "./assets/splash.png",
       "resizeMode": "contain",
       "backgroundColor": "#FFFFFF"
     },
@@ -24,10 +22,6 @@
       }
     },
     "android": {
-      "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#FFFFFF"
-      },
       "package": "taxi.speyride",
       "permissions": [
         "ACCESS_FINE_LOCATION",
@@ -40,6 +34,8 @@
     "plugins": [
       "expo-router",
       "expo-font",
+      "expo-secure-store",
+      "expo-web-browser",
       [
         "expo-location",
         {
