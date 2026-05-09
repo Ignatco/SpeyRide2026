@@ -477,9 +477,33 @@ async def driver_location(req: DriverLocationReq, current_user: dict = Depends(g
         raise HTTPException(403, "Only drivers")
     await db.users.update_one(
         {"id": current_user["id"]},
-        {"$set": {"current_lat": req.lat, "current_lng": req.lng}}
+        {"$set": {"current_lat": req.lat, "current_lng": req.lng, "location_updated_at": _utcnow_iso()}}
     )
     return {"ok": True}
+
+@api_router.get("/rides/{ride_id}/driver-location")
+async def ride_driver_location(ride_id: str, current_user: dict = Depends(get_current_user)):
+    """Live driver location for a specific ride. Visible to ride's rider or driver."""
+    ride = await db.rides.find_one({"id": ride_id}, {"_id": 0})
+    if not ride:
+        raise HTTPException(404, "Ride not found")
+    if ride["rider_id"] != current_user["id"] and ride.get("driver_id") != current_user["id"]:
+        raise HTTPException(403, "Forbidden")
+    if not ride.get("driver_id") or ride["status"] in ("completed", "cancelled", "searching"):
+        return {"location": None}
+    driver = await db.users.find_one(
+        {"id": ride["driver_id"]},
+        {"_id": 0, "current_lat": 1, "current_lng": 1, "location_updated_at": 1}
+    )
+    if not driver or driver.get("current_lat") is None:
+        return {"location": None}
+    return {
+        "location": {
+            "lat": driver["current_lat"],
+            "lng": driver["current_lng"],
+            "updated_at": driver.get("location_updated_at"),
+        }
+    }
 
 @api_router.get("/driver/requests")
 async def driver_requests(current_user: dict = Depends(get_current_user)):

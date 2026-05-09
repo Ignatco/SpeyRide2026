@@ -22,6 +22,7 @@ export default function RiderRide() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
   const [ride, setRide] = useState(null);
+  const [driverPos, setDriverPos] = useState(null);
   const [rating, setRating] = useState(0);
   const [review, setReview] = useState('');
   const [paying, setPaying] = useState(false);
@@ -34,11 +35,30 @@ export default function RiderRide() {
     } catch {}
   }, [id]);
 
+  const fetchDriverLoc = useCallback(async () => {
+    try {
+      const { data } = await api.get(`/rides/${id}/driver-location`);
+      setDriverPos(data.location);
+    } catch {}
+  }, [id]);
+
   useEffect(() => {
     fetchRide();
     const t = setInterval(fetchRide, 4000);
     return () => clearInterval(t);
   }, [fetchRide]);
+
+  // Poll live driver location while ride is active (driver assigned + not finished)
+  useEffect(() => {
+    if (!ride || !ride.driver_id) return;
+    if (['completed', 'cancelled', 'searching'].includes(ride.status)) {
+      setDriverPos(null);
+      return;
+    }
+    fetchDriverLoc();
+    const t = setInterval(fetchDriverLoc, 4000);
+    return () => clearInterval(t);
+  }, [ride?.driver_id, ride?.status, fetchDriverLoc]);
 
   if (!ride) {
     return (
@@ -118,6 +138,7 @@ export default function RiderRide() {
         <Map
           pickup={{ lat: ride.pickup_lat, lng: ride.pickup_lng }}
           drop={{ lat: ride.drop_lat, lng: ride.drop_lng }}
+          driverPos={driverPos}
           height={300}
         />
         {ride.status === 'searching' && (

@@ -1,8 +1,9 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { View, Text, StyleSheet, Pressable, ScrollView, ActivityIndicator, Alert, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import * as Location from 'expo-location';
 import Map from '../../../components/Map';
 import Button from '../../../components/Button';
 import { api } from '../../../lib/api';
@@ -40,6 +41,32 @@ export default function DriverRide() {
     return () => clearInterval(t);
   }, [fetchRide]);
 
+  // Stream driver location to backend while ride is active
+  useEffect(() => {
+    if (!ride || ['completed', 'cancelled'].includes(ride.status)) return;
+    let cancelled = false;
+    let watcher;
+    (async () => {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted' || cancelled) return;
+      watcher = await Location.watchPositionAsync(
+        { accuracy: Location.Accuracy.High, timeInterval: 5000, distanceInterval: 25 },
+        async (pos) => {
+          try {
+            await api.post('/driver/location', {
+              lat: pos.coords.latitude,
+              lng: pos.coords.longitude,
+            });
+          } catch {}
+        }
+      );
+    })();
+    return () => {
+      cancelled = true;
+      if (watcher) watcher.remove();
+    };
+  }, [ride?.status]);
+
   if (!ride) {
     return (
       <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
@@ -72,6 +99,7 @@ export default function DriverRide() {
           pickup={{ lat: ride.pickup_lat, lng: ride.pickup_lng }}
           drop={{ lat: ride.drop_lat, lng: ride.drop_lng }}
           height={300}
+          showsUserLocation
         />
       </View>
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 20, paddingBottom: 40 }}>
