@@ -16,7 +16,7 @@ TaskManager.defineTask(BG_LOCATION_TASK, async ({ data, error }) => {
   try {
     const token = await SecureStore.getItemAsync('taxi_token');
     if (!token) return;
-    const base = process.env.EXPO_PUBLIC_BACKEND_URL;
+    const base = process.env.EXPO_PUBLIC_BACKEND_URL || 'https://ride-ready-13.preview.emergentagent.com';
     await axios.post(
       `${base}/api/driver/location`,
       {
