@@ -33,7 +33,21 @@ export default function Login() {
       }
       setStep(2);
     } catch (e) {
-      Alert.alert('Failed', e.response?.data?.detail || 'Could not send OTP');
+      // Verbose logging so failures show in the Metro terminal
+      // eslint-disable-next-line no-console
+      console.log('[send-otp] FAILED', {
+        message: e?.message,
+        code: e?.code,
+        status: e?.response?.status,
+        data: e?.response?.data,
+        url: e?.config?.url,
+        baseURL: e?.config?.baseURL,
+      });
+      Alert.alert(
+        'Failed',
+        e?.response?.data?.detail ||
+          `Could not send OTP\n${e?.message || ''}`.trim()
+      );
     } finally {
       setLoading(false);
     }
