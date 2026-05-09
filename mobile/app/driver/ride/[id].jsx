@@ -8,6 +8,7 @@ import Map from '../../../components/Map';
 import Button from '../../../components/Button';
 import { api } from '../../../lib/api';
 import { colors } from '../../../lib/theme';
+import { startDriverBackgroundStream, stopDriverBackgroundStream } from '../../../lib/locationTask';
 
 const NEXT = {
   accepted: { next: 'arrived', label: "I've arrived" },
@@ -41,12 +42,21 @@ export default function DriverRide() {
     return () => clearInterval(t);
   }, [fetchRide]);
 
-  // Stream driver location to backend while ride is active
+  // Stream driver location to backend while ride is active.
+  // Try background mode first; fall back to foreground watcher if denied.
   useEffect(() => {
     if (!ride || ['completed', 'cancelled'].includes(ride.status)) return;
     let cancelled = false;
     let watcher;
+    let bgActive = false;
     (async () => {
+      bgActive = await startDriverBackgroundStream();
+      if (cancelled) {
+        if (bgActive) await stopDriverBackgroundStream();
+        return;
+      }
+      if (bgActive) return; // background task is running, no foreground watcher needed
+      // Fallback: foreground-only watcher
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted' || cancelled) return;
       watcher = await Location.watchPositionAsync(
@@ -56,6 +66,7 @@ export default function DriverRide() {
             await api.post('/driver/location', {
               lat: pos.coords.latitude,
               lng: pos.coords.longitude,
+              heading: typeof pos.coords.heading === 'number' && pos.coords.heading >= 0 ? pos.coords.heading : null,
             });
           } catch {}
         }
@@ -64,6 +75,7 @@ export default function DriverRide() {
     return () => {
       cancelled = true;
       if (watcher) watcher.remove();
+      stopDriverBackgroundStream();
     };
   }, [ride?.status]);
 

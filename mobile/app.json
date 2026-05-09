@@ -18,8 +18,9 @@
       "bundleIdentifier": "taxi.speyride",
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "Spey Ride uses your location to find nearby drivers and provide pickups.",
-        "NSLocationAlwaysAndWhenInUseUsageDescription": "Drivers share location while online so riders can be matched.",
-        "ITSAppUsesNonExemptEncryption": false
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Drivers share location while online so riders can be matched and tracked. Background location keeps the ride live when the screen is locked.",
+        "ITSAppUsesNonExemptEncryption": false,
+        "UIBackgroundModes": ["location", "fetch"]
       }
     },
     "android": {
@@ -28,7 +29,13 @@
         "backgroundColor": "#FFFFFF"
       },
       "package": "taxi.speyride",
-      "permissions": ["ACCESS_FINE_LOCATION", "ACCESS_COARSE_LOCATION"]
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_LOCATION"
+      ]
     },
     "plugins": [
       "expo-router",
@@ -36,7 +43,9 @@
       [
         "expo-location",
         {
-          "locationAlwaysAndWhenInUsePermission": "Allow Spey Ride to use your location."
+          "locationAlwaysAndWhenInUsePermission": "Allow Spey Ride to use your location even while in the background so riders can track your arrival.",
+          "isIosBackgroundLocationEnabled": true,
+          "isAndroidBackgroundLocationEnabled": true
         }
       ]
     ],

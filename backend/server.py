@@ -154,6 +154,7 @@ class RatingReq(BaseModel):
 class DriverLocationReq(BaseModel):
     lat: float
     lng: float
+    heading: Optional[float] = None
 
 class OnlineToggleReq(BaseModel):
     is_online: bool
@@ -475,10 +476,14 @@ async def driver_toggle(req: OnlineToggleReq, current_user: dict = Depends(get_c
 async def driver_location(req: DriverLocationReq, current_user: dict = Depends(get_current_user)):
     if current_user.get("role") != "driver":
         raise HTTPException(403, "Only drivers")
-    await db.users.update_one(
-        {"id": current_user["id"]},
-        {"$set": {"current_lat": req.lat, "current_lng": req.lng, "location_updated_at": _utcnow_iso()}}
-    )
+    update = {
+        "current_lat": req.lat,
+        "current_lng": req.lng,
+        "location_updated_at": _utcnow_iso(),
+    }
+    if req.heading is not None:
+        update["current_heading"] = req.heading
+    await db.users.update_one({"id": current_user["id"]}, {"$set": update})
     return {"ok": True}
 
 @api_router.get("/rides/{ride_id}/driver-location")
@@ -493,7 +498,7 @@ async def ride_driver_location(ride_id: str, current_user: dict = Depends(get_cu
         return {"location": None}
     driver = await db.users.find_one(
         {"id": ride["driver_id"]},
-        {"_id": 0, "current_lat": 1, "current_lng": 1, "location_updated_at": 1}
+        {"_id": 0, "current_lat": 1, "current_lng": 1, "current_heading": 1, "location_updated_at": 1}
     )
     if not driver or driver.get("current_lat") is None:
         return {"location": None}
@@ -501,6 +506,7 @@ async def ride_driver_location(ride_id: str, current_user: dict = Depends(get_cu
         "location": {
             "lat": driver["current_lat"],
             "lng": driver["current_lng"],
+            "heading": driver.get("current_heading"),
             "updated_at": driver.get("location_updated_at"),
         }
     }
