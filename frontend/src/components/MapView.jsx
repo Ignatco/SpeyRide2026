@@ -22,7 +22,7 @@ const pinIcon = (color) =>
   });
 
 export default function MapView({
-  center = [40.7128, -74.006],
+  center = [57.1959, -3.829],
   pickup = null,
   drop = null,
   driverPos = null,

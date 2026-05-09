@@ -44,14 +44,14 @@ export default function DriverEarnings() {
         <div className="border-2 border-[#27272A] bg-[#18181B] p-4">
           <div className="label-eyebrow text-[#A1A1AA]">Today</div>
           <div className="font-display font-black text-3xl tracking-tighter text-[#DFFF00] mt-1" data-testid="earnings-today">
-            ${todayEarn.toFixed(2)}
+            £{todayEarn.toFixed(2)}
           </div>
           <div className="text-xs text-[#A1A1AA] mt-1">{today.length} trips</div>
         </div>
         <div className="border-2 border-[#27272A] bg-[#18181B] p-4">
           <div className="label-eyebrow text-[#A1A1AA]">All time</div>
           <div className="font-display font-black text-3xl tracking-tighter text-[#DFFF00] mt-1" data-testid="earnings-total">
-            ${total.toFixed(2)}
+            £{total.toFixed(2)}
           </div>
           <div className="text-xs text-[#A1A1AA] mt-1">{rides.length} trips</div>
         </div>
@@ -77,7 +77,7 @@ export default function DriverEarnings() {
                 <div className="text-sm font-medium truncate">{r.drop_address}</div>
               </div>
               <div className="font-display font-black text-xl tracking-tighter text-[#DFFF00]">
-                ${r.fare.toFixed(2)}
+                £{r.fare.toFixed(2)}
               </div>
             </div>
           ))}

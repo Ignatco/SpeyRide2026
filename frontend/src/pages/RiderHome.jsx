@@ -111,12 +111,12 @@ export default function RiderHome() {
           }
         },
         () => {
-          setPickup({ lat: 40.7128, lng: -74.006, address: "New York, NY (default)" });
+          setPickup({ lat: 57.1959, lng: -3.829, address: "Aviemore, Highland (default)" });
         },
         { timeout: 5000 }
       );
     } else {
-      setPickup({ lat: 40.7128, lng: -74.006, address: "New York, NY (default)" });
+      setPickup({ lat: 57.1959, lng: -3.829, address: "Aviemore, Highland (default)" });
     }
     // eslint-disable-next-line
   }, []);
@@ -253,7 +253,7 @@ export default function RiderHome() {
                     <Icon className="w-6 h-6 mb-2" strokeWidth={2.5} />
                     <div className="font-display font-bold text-sm tracking-tight">{v.label}</div>
                     <div className="text-[10px] opacity-80 mb-1">{v.eta}</div>
-                    <div className="font-display font-black text-lg tracking-tighter">${est.fare.toFixed(2)}</div>
+                    <div className="font-display font-black text-lg tracking-tighter">£{est.fare.toFixed(2)}</div>
                   </button>
                 );
               })}
@@ -286,7 +286,7 @@ export default function RiderHome() {
               className="w-full py-5 bg-[#002FA7] text-white font-display font-black text-lg tracking-tight inline-flex items-center justify-center gap-2 transition-all hover:-translate-y-[2px] hover:shadow-[6px_6px_0_0_#0A0A0A] disabled:opacity-50"
             >
               {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Navigation2 className="w-5 h-5" strokeWidth={2.5} />}
-              Confirm {VEHICLES.find((x) => x.id === vehicle).label} · ${estimates.estimates[vehicle].fare.toFixed(2)}
+              Confirm {VEHICLES.find((x) => x.id === vehicle).label} · £{estimates.estimates[vehicle].fare.toFixed(2)}
             </button>
           </>
         )}

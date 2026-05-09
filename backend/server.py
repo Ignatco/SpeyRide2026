@@ -615,7 +615,7 @@ async def create_checkout(ride_id: str, request: Request, current_user: dict = D
         "ride_id": ride_id,
         "user_id": current_user["id"],
         "amount": amount,
-        "currency": "usd",
+        "currency": "gbp",
         "status": "initiated",
         "payment_status": "pending",
         "metadata": metadata,

@@ -118,7 +118,7 @@ export default function DriverRide() {
             </div>
             <div>
               <div className="label-eyebrow text-[#A1A1AA]">Earn</div>
-              <div className="font-display font-bold text-[#DFFF00]" data-testid="ride-earnings">${ride.fare.toFixed(2)}</div>
+              <div className="font-display font-bold text-[#DFFF00]" data-testid="ride-earnings">£{ride.fare.toFixed(2)}</div>
             </div>
           </div>
         </div>
@@ -138,7 +138,7 @@ export default function DriverRide() {
         {isCompleted && (
           <div className="text-center" data-testid="trip-complete-section">
             <CheckCircle2 className="w-14 h-14 mx-auto mb-3 text-[#00E676]" strokeWidth={2.5} />
-            <p className="text-[#A1A1AA] mb-5">+${ride.fare.toFixed(2)} added to earnings</p>
+            <p className="text-[#A1A1AA] mb-5">+£{ride.fare.toFixed(2)} added to earnings</p>
             <button
               onClick={() => navigate("/driver")}
               data-testid="back-to-driver-btn"

@@ -57,7 +57,7 @@ export default function RiderHistory() {
               <div className="text-sm font-medium truncate">↓ {r.drop_address}</div>
               <div className="flex justify-between mt-3 pt-3 border-t border-[#E4E4E7]">
                 <span className="text-sm text-[#52525B]">{r.distance_km} km · {r.vehicle_class}</span>
-                <span className="font-display font-black tracking-tighter text-xl">${r.fare.toFixed(2)}</span>
+                <span className="font-display font-black tracking-tighter text-xl">£{r.fare.toFixed(2)}</span>
               </div>
             </div>
           ))}

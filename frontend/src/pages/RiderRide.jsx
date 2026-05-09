@@ -227,7 +227,7 @@ export default function RiderRide() {
             </div>
             <div>
               <div className="label-eyebrow text-[#52525B]">Fare</div>
-              <div className="font-display font-bold text-[#002FA7]" data-testid="ride-fare">${ride.fare.toFixed(2)}</div>
+              <div className="font-display font-bold text-[#002FA7]" data-testid="ride-fare">£{ride.fare.toFixed(2)}</div>
             </div>
           </div>
         </div>
@@ -248,7 +248,7 @@ export default function RiderRide() {
           <div className="border-2 border-black p-5 mb-4 bg-[#F4F4F5]" data-testid="payment-section">
             <span className="label-eyebrow text-[#002FA7]">Settle up</span>
             <div className="font-display font-black tracking-tighter text-5xl my-3">
-              ${ride.fare.toFixed(2)}
+              £{ride.fare.toFixed(2)}
             </div>
             <p className="text-sm text-[#52525B] mb-4">
               Selected: <span className="font-bold uppercase">{ride.payment_method}</span>

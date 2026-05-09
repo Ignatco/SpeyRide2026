@@ -10,7 +10,7 @@ export default function DriverHome() {
   const navigate = useNavigate();
   const { user, logout, refresh } = useAuth();
   const [online, setOnline] = useState(user?.is_online || false);
-  const [loc, setLoc] = useState({ lat: user?.current_lat || 40.7128, lng: user?.current_lng || -74.006 });
+  const [loc, setLoc] = useState({ lat: user?.current_lat || 57.1959, lng: user?.current_lng || -3.829 });
   const [requests, setRequests] = useState([]);
   const [activeRide, setActiveRide] = useState(null);
   const [accepting, setAccepting] = useState(null);
@@ -122,7 +122,7 @@ export default function DriverHome() {
         <div className="bg-[#18181B] border-2 border-[#27272A] p-3">
           <div className="label-eyebrow text-[#A1A1AA]">Earnings</div>
           <div className="font-display font-black tracking-tighter text-xl text-[#DFFF00]" data-testid="stat-earnings">
-            ${(user?.earnings_total || 0).toFixed(2)}
+            £{(user?.earnings_total || 0).toFixed(2)}
           </div>
         </div>
         <div className="bg-[#18181B] border-2 border-[#27272A] p-3">
@@ -177,7 +177,7 @@ export default function DriverHome() {
                   <div>
                     <div className="label-eyebrow text-[#A1A1AA]">{r.rider_name}</div>
                     <div className="font-display font-black text-2xl tracking-tighter text-[#DFFF00]">
-                      ${r.fare.toFixed(2)}
+                      £{r.fare.toFixed(2)}
                     </div>
                   </div>
                   <span className="label-eyebrow bg-[#DFFF00] text-black px-2 py-1">{r.vehicle_class}</span>

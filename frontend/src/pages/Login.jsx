@@ -12,14 +12,14 @@ export default function Login() {
   const { login } = useAuth();
 
   const [step, setStep] = useState(1); // 1: phone, 2: otp
-  const [phone, setPhone] = useState("+1");
+  const [phone, setPhone] = useState("+44");
   const [code, setCode] = useState("");
   const [devCode, setDevCode] = useState(null);
   const [loading, setLoading] = useState(false);
 
   const sendOTP = async () => {
     if (!phone.startsWith("+") || phone.length < 8) {
-      toast.error("Enter phone in E.164 format (e.g. +14155552671)");
+      toast.error("Enter phone in E.164 format (e.g. +447424011420)");
       return;
     }
     setLoading(true);
@@ -88,7 +88,7 @@ export default function Login() {
               type="tel"
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
-              placeholder="+14155552671"
+              placeholder="+447424011420"
               className="w-full px-5 py-5 text-2xl font-display font-bold tracking-tight border-2 border-black bg-white focus:outline-none focus:border-[#002FA7]"
             />
             <button
