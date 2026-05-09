@@ -13,7 +13,7 @@ export default function Landing() {
 
   useEffect(() => {
     if (loading || !user) return;
-    if (!user.role || !user.name) {
+    if (!user.role || !user.first_name || !user.dob) {
       router.replace('/onboarding');
     } else {
       router.replace(user.role === 'driver' ? '/driver' : '/rider');

@@ -72,7 +72,9 @@ class VerifyOTPReq(BaseModel):
     code: str
 
 class CompleteProfileReq(BaseModel):
-    name: str
+    first_name: str
+    last_name: str
+    dob: str  # ISO date YYYY-MM-DD
     role: Literal['rider', 'driver']
     vehicle_make: Optional[str] = None
     vehicle_model: Optional[str] = None
@@ -83,7 +85,10 @@ class User(BaseModel):
     model_config = ConfigDict(extra="ignore")
     id: str
     phone: str
-    name: Optional[str] = None
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    name: Optional[str] = None  # computed full name for display / legacy
+    dob: Optional[str] = None
     role: Optional[Literal['rider', 'driver']] = None
     avatar_url: Optional[str] = None
     rating: float = 5.0
@@ -412,13 +417,30 @@ async def verify_otp(req: VerifyOTPReq):
     return {
         "token": token,
         "user": _serialize(user),
-        "needs_profile": not user.get("role") or not user.get("name"),
+        "needs_profile": not user.get("role") or not user.get("first_name") or not user.get("dob"),
     }
 
 @api_router.post("/auth/complete-profile")
 async def complete_profile(req: CompleteProfileReq, current_user: dict = Depends(get_current_user)):
+    # Validate DOB & age
+    try:
+        dob_date = datetime.strptime(req.dob, "%Y-%m-%d").date()
+    except ValueError:
+        raise HTTPException(400, "Invalid date of birth (use YYYY-MM-DD)")
+    today = datetime.now(timezone.utc).date()
+    age = today.year - dob_date.year - ((today.month, today.day) < (dob_date.month, dob_date.day))
+    min_age = 21 if req.role == "driver" else 16
+    if age < min_age:
+        raise HTTPException(400, f"You must be at least {min_age} years old to register as a {req.role}")
+    if age > 110:
+        raise HTTPException(400, "Invalid date of birth")
+
+    full_name = f"{req.first_name.strip()} {req.last_name.strip()}".strip()
     update = {
-        "name": req.name,
+        "first_name": req.first_name.strip(),
+        "last_name": req.last_name.strip(),
+        "name": full_name,
+        "dob": req.dob,
         "role": req.role,
     }
     if req.role == "driver":

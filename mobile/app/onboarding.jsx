@@ -3,11 +3,28 @@ import { View, Text, StyleSheet, Pressable, Alert, ScrollView, KeyboardAvoidingV
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { api } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import { colors } from '../lib/theme';
 import Input from '../components/Input';
 import Button from '../components/Button';
+
+const DEFAULT_DOB = new Date(2000, 0, 1); // Jan 1, 2000
+
+function formatDOB(d) {
+  if (!d) return '';
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  return `${dd}/${mm}/${d.getFullYear()}`;
+}
+
+function toISO(d) {
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+}
 
 export default function Onboarding() {
   const router = useRouter();
@@ -15,23 +32,40 @@ export default function Onboarding() {
   const { setUser } = useAuth();
 
   const [role, setRole] = useState(params.role || '');
-  const [name, setName] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [dob, setDob] = useState(null);
+  const [showPicker, setShowPicker] = useState(false);
   const [vMake, setVMake] = useState('');
   const [vModel, setVModel] = useState('');
   const [vPlate, setVPlate] = useState('');
   const [vClass, setVClass] = useState('sedan');
   const [loading, setLoading] = useState(false);
 
+  const today = new Date();
+  const maxDOB = new Date(today.getFullYear() - 16, today.getMonth(), today.getDate());
+  const minDOB = new Date(today.getFullYear() - 100, 0, 1);
+
+  const onPickDate = (event, selectedDate) => {
+    if (Platform.OS === 'android') setShowPicker(false);
+    if (event?.type === 'dismissed') return;
+    if (selectedDate) setDob(selectedDate);
+  };
+
   const submit = async () => {
     if (!role) return Alert.alert('Choose role', 'Pick Rider or Driver');
-    if (!name.trim()) return Alert.alert('Missing', 'Enter your name');
+    if (!firstName.trim()) return Alert.alert('Missing', 'Enter first name');
+    if (!lastName.trim()) return Alert.alert('Missing', 'Enter last name');
+    if (!dob) return Alert.alert('Missing', 'Enter date of birth');
     if (role === 'driver' && (!vMake || !vModel || !vPlate)) {
       return Alert.alert('Missing', 'Complete vehicle details');
     }
     setLoading(true);
     try {
       const { data } = await api.post('/auth/complete-profile', {
-        name,
+        first_name: firstName.trim(),
+        last_name: lastName.trim(),
+        dob: toISO(dob),
         role,
         vehicle_make: vMake || null,
         vehicle_model: vModel || null,
@@ -50,9 +84,9 @@ export default function Onboarding() {
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <ScrollView contentContainerStyle={{ padding: 24 }} keyboardShouldPersistTaps="handled">
+        <ScrollView contentContainerStyle={{ padding: 24, paddingBottom: 60 }} keyboardShouldPersistTaps="handled">
           <Text style={styles.eyebrow}>STEP 03 / PROFILE</Text>
-          <Text style={styles.h1}>Who are{'\n'}you?</Text>
+          <Text style={styles.h1}>Create your{'\n'}account.</Text>
 
           <View style={styles.rolesRow}>
             <RoleCard
@@ -75,7 +109,59 @@ export default function Onboarding() {
             />
           </View>
 
-          <Input label="Full name" value={name} onChangeText={setName} placeholder="Alex Morgan" testID="onboarding-name-input" style={{ marginTop: 24 }} />
+          <View style={{ flexDirection: 'row', gap: 8, marginTop: 24 }}>
+            <Input
+              label="First name"
+              value={firstName}
+              onChangeText={setFirstName}
+              placeholder="Alex"
+              testID="onboarding-firstname-input"
+              style={{ flex: 1 }}
+              autoCapitalize="words"
+            />
+            <Input
+              label="Last name"
+              value={lastName}
+              onChangeText={setLastName}
+              placeholder="Morgan"
+              testID="onboarding-lastname-input"
+              style={{ flex: 1 }}
+              autoCapitalize="words"
+            />
+          </View>
+
+          <Text style={[styles.fieldLabel, { marginTop: 24 }]}>DATE OF BIRTH</Text>
+          <Pressable
+            onPress={() => setShowPicker(true)}
+            style={styles.dobBtn}
+            testID="onboarding-dob-btn"
+          >
+            <Ionicons name="calendar-outline" size={20} color={colors.black} />
+            <Text style={[styles.dobText, !dob && { color: colors.riderTextMuted }]}>
+              {dob ? formatDOB(dob) : 'DD / MM / YYYY'}
+            </Text>
+          </Pressable>
+          {showPicker && (
+            <DateTimePicker
+              value={dob || DEFAULT_DOB}
+              mode="date"
+              display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+              onChange={onPickDate}
+              maximumDate={maxDOB}
+              minimumDate={minDOB}
+              style={Platform.OS === 'ios' ? { height: 180 } : undefined}
+            />
+          )}
+          {Platform.OS === 'ios' && showPicker && (
+            <Pressable onPress={() => setShowPicker(false)} style={styles.doneBtn} testID="dob-done-btn">
+              <Text style={styles.doneText}>Done</Text>
+            </Pressable>
+          )}
+          <Text style={styles.helper}>
+            {role === 'driver'
+              ? 'Drivers must be 21 or older'
+              : 'Riders must be 16 or older'}
+          </Text>
 
           {role === 'driver' && (
             <View style={styles.driverSection}>
@@ -108,7 +194,7 @@ export default function Onboarding() {
           )}
 
           <View style={{ height: 32 }} />
-          <Button title="Continue" onPress={submit} loading={loading} testID="onboarding-submit-btn" />
+          <Button title="Create account" onPress={submit} loading={loading} testID="onboarding-submit-btn" />
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -143,6 +229,19 @@ const styles = StyleSheet.create({
   roleCard: { flex: 1, padding: 20, borderWidth: 2 },
   roleTitle: { fontSize: 20, fontWeight: '900', letterSpacing: -0.6, marginTop: 12 },
   roleSub: { fontSize: 12, marginTop: 4 },
+
+  fieldLabel: { fontSize: 11, fontWeight: '700', letterSpacing: 2, color: colors.riderTextMuted, marginBottom: 8 },
+  dobBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    borderWidth: 2, borderColor: colors.black,
+    paddingHorizontal: 16, paddingVertical: 18,
+    backgroundColor: colors.white,
+  },
+  dobText: { fontSize: 18, fontWeight: '600', color: colors.black, fontVariant: ['tabular-nums'] },
+  doneBtn: { alignSelf: 'flex-end', paddingHorizontal: 12, paddingVertical: 6, marginTop: 4 },
+  doneText: { color: colors.riderCta, fontWeight: '700', letterSpacing: 1 },
+  helper: { fontSize: 12, color: colors.riderTextMuted, marginTop: 8 },
+
   driverSection: { marginTop: 24, paddingTop: 24, borderTopWidth: 2, borderTopColor: colors.black, gap: 12 },
   classBtn: {
     flex: 1,

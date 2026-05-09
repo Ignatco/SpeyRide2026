@@ -16,7 +16,7 @@ function Protected({ role, children }) {
   const { user, loading } = useAuth();
   if (loading) return <SplashLoader />;
   if (!user) return <Navigate to="/login" replace />;
-  if (!user.role || !user.name) return <Navigate to="/onboarding" replace />;
+  if (!user.role || !user.first_name || !user.dob) return <Navigate to="/onboarding" replace />;
   if (role && user.role !== role) {
     return <Navigate to={user.role === "driver" ? "/driver" : "/rider"} replace />;
   }
