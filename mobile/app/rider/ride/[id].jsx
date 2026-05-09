@@ -141,6 +141,18 @@ export default function RiderRide() {
           driverPos={driverPos}
           height={300}
         />
+        {driverPos?.eta_minutes != null && (
+          <SafeAreaView edges={['top']} style={styles.etaWrap} pointerEvents="none">
+            <View style={styles.etaBadge}>
+              <View style={styles.etaDot} />
+              <Text style={styles.etaText}>
+                {driverPos.target === 'pickup' ? 'Driver ' : 'Arriving in '}
+                <Text style={styles.etaStrong}>{driverPos.eta_minutes} min</Text>
+                <Text style={styles.etaMuted}> · {driverPos.distance_km} km away</Text>
+              </Text>
+            </View>
+          </SafeAreaView>
+        )}
         {ride.status === 'searching' && (
           <SafeAreaView edges={['top']} style={styles.mapOverlay}>
             <Pressable onPress={() => router.replace('/rider')} style={styles.backBtn} testID="rider-ride-back-btn">
@@ -277,6 +289,16 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.white },
   mapWrap: { height: 300 },
   mapOverlay: { position: 'absolute', top: 0, left: 0, right: 0 },
+  etaWrap: { position: 'absolute', top: 0, left: 0, right: 0, alignItems: 'center', paddingTop: 12 },
+  etaBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    backgroundColor: colors.black,
+    paddingHorizontal: 16, paddingVertical: 10,
+  },
+  etaDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.success },
+  etaText: { color: colors.white, fontSize: 14, fontWeight: '600' },
+  etaStrong: { fontWeight: '900', letterSpacing: -0.4 },
+  etaMuted: { color: '#A1A1AA', fontWeight: '500' },
   backBtn: { width: 40, height: 40, backgroundColor: colors.white, borderWidth: 2, borderColor: colors.black, alignItems: 'center', justifyContent: 'center', margin: 16 },
   eyebrow: { fontSize: 10, fontWeight: '700', letterSpacing: 2, color: colors.riderTextMuted },
   statusBanner: {

@@ -488,7 +488,7 @@ async def driver_location(req: DriverLocationReq, current_user: dict = Depends(g
 
 @api_router.get("/rides/{ride_id}/driver-location")
 async def ride_driver_location(ride_id: str, current_user: dict = Depends(get_current_user)):
-    """Live driver location for a specific ride. Visible to ride's rider or driver."""
+    """Live driver location + ETA for a specific ride. Visible to ride's rider or driver."""
     ride = await db.rides.find_one({"id": ride_id}, {"_id": 0})
     if not ride:
         raise HTTPException(404, "Ride not found")
@@ -502,12 +502,27 @@ async def ride_driver_location(ride_id: str, current_user: dict = Depends(get_cu
     )
     if not driver or driver.get("current_lat") is None:
         return {"location": None}
+
+    # Compute distance + ETA to next waypoint based on ride state
+    if ride["status"] in ("accepted", "arrived"):
+        target_lat, target_lng = ride["pickup_lat"], ride["pickup_lng"]
+        target = "pickup"
+    else:  # in_transit
+        target_lat, target_lng = ride["drop_lat"], ride["drop_lng"]
+        target = "drop"
+    distance_km = _haversine_km(driver["current_lat"], driver["current_lng"], target_lat, target_lng)
+    avg_speed_kmh = 35.0  # rural Highland average, accounts for stops
+    eta_minutes = max(1, round(distance_km / avg_speed_kmh * 60))
+
     return {
         "location": {
             "lat": driver["current_lat"],
             "lng": driver["current_lng"],
             "heading": driver.get("current_heading"),
             "updated_at": driver.get("location_updated_at"),
+            "distance_km": round(distance_km, 2),
+            "eta_minutes": eta_minutes,
+            "target": target,
         }
     }
 
