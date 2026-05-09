@@ -17,15 +17,22 @@ const VEHICLES = [
 ];
 
 async function geocode(q) {
-  const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&limit=5`, {
-    headers: { 'Accept-Language': 'en' },
-  });
+  const res = await fetch(
+    `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&limit=8&countrycodes=gb`,
+    { headers: { 'Accept-Language': 'en-GB' } }
+  );
   return res.json();
 }
 
 async function reverseGeocode(lat, lng) {
-  const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`);
-  return res.json();
+  const res = await fetch(
+    `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`,
+    { headers: { 'Accept-Language': 'en-GB' } }
+  );
+  const data = await res.json();
+  // Reject if not in UK
+  if (data?.address?.country_code && data.address.country_code !== 'gb') return null;
+  return data;
 }
 
 export default function RiderHome() {
@@ -51,7 +58,12 @@ export default function RiderHome() {
       try {
         const loc = await Location.getCurrentPositionAsync({});
         const r = await reverseGeocode(loc.coords.latitude, loc.coords.longitude);
-        setPickup({ lat: loc.coords.latitude, lng: loc.coords.longitude, address: r.display_name || 'Current location' });
+        if (r) {
+          setPickup({ lat: loc.coords.latitude, lng: loc.coords.longitude, address: r.display_name || 'Current location' });
+        } else {
+          // Outside UK — fall back to Aviemore default
+          setPickup({ lat: 57.1959, lng: -3.829, address: 'Aviemore, Highland (default)' });
+        }
       } catch {
         setPickup({ lat: 57.1959, lng: -3.829, address: 'Aviemore, Highland (default)' });
       }
@@ -261,7 +273,7 @@ function AddressPicker({ which, onClose, onPick }) {
           <TI
             value={q}
             onChangeText={onChange}
-            placeholder="Search address"
+            placeholder="Search UK address, postcode or place"
             placeholderTextColor={colors.riderTextMuted}
             autoFocus
             style={pickerStyles.searchInput}
@@ -272,7 +284,7 @@ function AddressPicker({ which, onClose, onPick }) {
           keyExtractor={(it) => `${it.lat}-${it.lon}`}
           ListEmptyComponent={
             !searching && q.length >= 3 ? (
-              <Text style={pickerStyles.empty}>No results</Text>
+              <Text style={pickerStyles.empty}>No UK results. Try a postcode or place name.</Text>
             ) : searching ? (
               <ActivityIndicator style={{ marginTop: 24 }} />
             ) : null
@@ -373,13 +385,6 @@ const pickerStyles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, borderBottomWidth: 1, borderBottomColor: colors.riderBorder },
   title: { fontSize: 18, fontWeight: '800', letterSpacing: -0.5 },
   searchBox: { flexDirection: 'row', alignItems: 'center', borderWidth: 2, borderColor: colors.black, marginHorizontal: 16, marginVertical: 12, paddingHorizontal: 12, gap: 8 },
-  searchInput: { flex: 1, fontSize: 16, color: colors.black, paddingVertical: 14 },
-  inputBox: { flex: 1 },
-  empty: { textAlign: 'center', marginTop: 24, color: colors.riderTextMuted },
-  item: { flexDirection: 'row', gap: 10, padding: 14, borderBottomWidth: 1, borderBottomColor: colors.riderBorder },
-  itemText: { flex: 1, fontSize: 14, color: colors.black },
-});
-rderColor: colors.black, marginHorizontal: 16, marginVertical: 12, paddingHorizontal: 12, gap: 8 },
   searchInput: { flex: 1, fontSize: 16, color: colors.black, paddingVertical: 14 },
   inputBox: { flex: 1 },
   empty: { textAlign: 'center', marginTop: 24, color: colors.riderTextMuted },

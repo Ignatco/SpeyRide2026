@@ -103,11 +103,16 @@ export default function RiderHome() {
           const { latitude, longitude } = pos.coords;
           try {
             const r = await fetch(
-              `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`
+              `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&addressdetails=1`,
+              { headers: { "Accept-Language": "en-GB" } }
             ).then((x) => x.json());
-            setPickup({ lat: latitude, lng: longitude, address: r.display_name || "Current location" });
+            if (r?.address?.country_code === "gb") {
+              setPickup({ lat: latitude, lng: longitude, address: r.display_name || "Current location" });
+            } else {
+              setPickup({ lat: 57.1959, lng: -3.829, address: "Aviemore, Highland (default)" });
+            }
           } catch {
-            setPickup({ lat: latitude, lng: longitude, address: "Current location" });
+            setPickup({ lat: 57.1959, lng: -3.829, address: "Aviemore, Highland (default)" });
           }
         },
         () => {
@@ -219,14 +224,14 @@ export default function RiderHome() {
           <AddressInput
             value={pickup}
             onPick={setPickup}
-            placeholder="Pickup location"
+            placeholder="Pickup location (UK)"
             testid="pickup-input"
             color="#002FA7"
           />
           <AddressInput
             value={drop}
             onPick={setDrop}
-            placeholder="Where to?"
+            placeholder="Where to? (UK)"
             testid="drop-input"
             color="#FF2B2B"
           />
