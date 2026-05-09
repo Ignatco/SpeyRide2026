@@ -16,6 +16,7 @@ import math
 import random
 import uuid
 import jwt
+import httpx
 from pathlib import Path
 from pydantic import BaseModel, Field, ConfigDict
 from typing import List, Optional, Literal, Dict, Any
@@ -218,6 +219,50 @@ def _serialize(doc: dict) -> dict:
         if isinstance(v, datetime):
             out[k] = v.isoformat()
     return out
+
+# ==================== ROUTING (OSRM) ====================
+OSRM_BASE = os.environ.get("OSRM_BASE", "https://router.project-osrm.org")
+_route_cache: Dict[str, Dict[str, Any]] = {}  # cache_key -> {result, expires_at}
+
+async def _fetch_route(coords: List[Dict[str, float]]) -> Optional[Dict[str, Any]]:
+    """Call OSRM driving route API. Coords: [{lat, lng}, ...]. Returns geojson + meta or None."""
+    if len(coords) < 2:
+        return None
+    pairs = ";".join(f"{c['lng']},{c['lat']}" for c in coords)
+    url = f"{OSRM_BASE}/route/v1/driving/{pairs}"
+    params = {"overview": "full", "geometries": "geojson", "steps": "false"}
+    try:
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            r = await client.get(url, params=params)
+            r.raise_for_status()
+            data = r.json()
+        if data.get("code") != "Ok" or not data.get("routes"):
+            return None
+        route = data["routes"][0]
+        geometry = route.get("geometry", {})
+        return {
+            "coordinates": geometry.get("coordinates", []),  # [[lng, lat], ...]
+            "distance_m": route.get("distance", 0),
+            "duration_s": route.get("duration", 0),
+        }
+    except Exception as e:
+        logger.warning(f"OSRM route fetch failed: {e}")
+        return None
+
+def _cache_get(key: str):
+    entry = _route_cache.get(key)
+    if not entry:
+        return None
+    if entry["expires_at"] < datetime.now(timezone.utc).timestamp():
+        _route_cache.pop(key, None)
+        return None
+    return entry["data"]
+
+def _cache_set(key: str, data: dict, ttl_s: int = 60):
+    _route_cache[key] = {
+        "data": data,
+        "expires_at": datetime.now(timezone.utc).timestamp() + ttl_s,
+    }
 
 # ==================== AUTH ROUTES ====================
 
@@ -510,9 +555,30 @@ async def ride_driver_location(ride_id: str, current_user: dict = Depends(get_cu
     else:  # in_transit
         target_lat, target_lng = ride["drop_lat"], ride["drop_lng"]
         target = "drop"
+
+    # Try OSRM real-road duration first; fall back to haversine
     distance_km = _haversine_km(driver["current_lat"], driver["current_lng"], target_lat, target_lng)
-    avg_speed_kmh = 35.0  # rural Highland average, accounts for stops
-    eta_minutes = max(1, round(distance_km / avg_speed_kmh * 60))
+    eta_minutes = max(1, round(distance_km / 35.0 * 60))
+    rlat = round(driver["current_lat"], 4)
+    rlng = round(driver["current_lng"], 4)
+    osrm_kind = "pickup" if target == "pickup" else "ongoing"
+    cache_key = f"{osrm_kind}:{ride['id']}:{rlat},{rlng}"
+    cached = _cache_get(cache_key)
+    if cached and not cached.get("fallback"):
+        distance_km = cached["distance_km"]
+        eta_minutes = cached["duration_min"]
+    else:
+        coords = [{"lat": driver["current_lat"], "lng": driver["current_lng"]}, {"lat": target_lat, "lng": target_lng}]
+        route = await _fetch_route(coords)
+        if route:
+            distance_km = round(route["distance_m"] / 1000, 2)
+            eta_minutes = max(1, round(route["duration_s"] / 60))
+            _cache_set(cache_key, {
+                "coordinates": route["coordinates"],
+                "distance_km": distance_km,
+                "duration_min": eta_minutes,
+                "kind": osrm_kind,
+            }, ttl_s=20)
 
     return {
         "location": {
@@ -525,6 +591,89 @@ async def ride_driver_location(ride_id: str, current_user: dict = Depends(get_cu
             "target": target,
         }
     }
+
+@api_router.get("/rides/{ride_id}/route")
+async def ride_route(ride_id: str, kind: str = "trip", current_user: dict = Depends(get_current_user)):
+    """
+    Real road-following route for a ride.
+    kind=trip      : pickup -> drop (full itinerary, immutable per ride)
+    kind=pickup    : driver_current -> pickup (live, refreshes as driver moves)
+    kind=ongoing   : driver_current -> drop (during in_transit)
+    """
+    ride = await db.rides.find_one({"id": ride_id}, {"_id": 0})
+    if not ride:
+        raise HTTPException(404, "Ride not found")
+    if ride["rider_id"] != current_user["id"] and ride.get("driver_id") != current_user["id"]:
+        raise HTTPException(403, "Forbidden")
+
+    if kind == "trip":
+        cache_key = f"trip:{ride_id}"
+        cached = _cache_get(cache_key)
+        if cached:
+            return cached
+        coords = [
+            {"lat": ride["pickup_lat"], "lng": ride["pickup_lng"]},
+            {"lat": ride["drop_lat"], "lng": ride["drop_lng"]},
+        ]
+        route = await _fetch_route(coords)
+        if not route:
+            return {"coordinates": [], "distance_km": ride["distance_km"], "duration_min": ride["duration_min"], "fallback": True}
+        result = {
+            "coordinates": route["coordinates"],
+            "distance_km": round(route["distance_m"] / 1000, 2),
+            "duration_min": max(1, round(route["duration_s"] / 60)),
+            "kind": "trip",
+        }
+        _cache_set(cache_key, result, ttl_s=24 * 3600)  # immutable
+        return result
+
+    # Live routes (pickup or ongoing)
+    if not ride.get("driver_id") or ride["status"] in ("completed", "cancelled", "searching"):
+        return {"coordinates": [], "distance_km": 0, "duration_min": 0, "fallback": True}
+    driver = await db.users.find_one(
+        {"id": ride["driver_id"]},
+        {"_id": 0, "current_lat": 1, "current_lng": 1}
+    )
+    if not driver or driver.get("current_lat") is None:
+        return {"coordinates": [], "distance_km": 0, "duration_min": 0, "fallback": True}
+
+    if kind == "pickup":
+        target = {"lat": ride["pickup_lat"], "lng": ride["pickup_lng"]}
+    elif kind == "ongoing":
+        target = {"lat": ride["drop_lat"], "lng": ride["drop_lng"]}
+    else:
+        raise HTTPException(400, "kind must be trip, pickup, or ongoing")
+
+    # Round driver lat/lng for cache key (50m granularity)
+    rlat = round(driver["current_lat"], 4)
+    rlng = round(driver["current_lng"], 4)
+    cache_key = f"{kind}:{ride_id}:{rlat},{rlng}"
+    cached = _cache_get(cache_key)
+    if cached:
+        return cached
+    coords = [{"lat": driver["current_lat"], "lng": driver["current_lng"]}, target]
+    route = await _fetch_route(coords)
+    if not route:
+        # Fallback to haversine straight-line
+        d = _haversine_km(driver["current_lat"], driver["current_lng"], target["lat"], target["lng"])
+        return {
+            "coordinates": [
+                [driver["current_lng"], driver["current_lat"]],
+                [target["lng"], target["lat"]],
+            ],
+            "distance_km": round(d, 2),
+            "duration_min": max(1, round(d / 35 * 60)),
+            "fallback": True,
+            "kind": kind,
+        }
+    result = {
+        "coordinates": route["coordinates"],
+        "distance_km": round(route["distance_m"] / 1000, 2),
+        "duration_min": max(1, round(route["duration_s"] / 60)),
+        "kind": kind,
+    }
+    _cache_set(cache_key, result, ttl_s=20)  # 20s for live routes
+    return result
 
 @api_router.get("/driver/requests")
 async def driver_requests(current_user: dict = Depends(get_current_user)):

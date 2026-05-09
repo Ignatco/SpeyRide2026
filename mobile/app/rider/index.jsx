@@ -34,6 +34,7 @@ export default function RiderHome() {
   const [pickup, setPickup] = useState(null);
   const [drop, setDrop] = useState(null);
   const [estimates, setEstimates] = useState(null);
+  const [previewRoute, setPreviewRoute] = useState(null);
   const [vehicle, setVehicle] = useState('sedan');
   const [paymentMethod, setPaymentMethod] = useState('cash');
   const [loading, setLoading] = useState(false);
@@ -107,7 +108,7 @@ export default function RiderHome() {
 
   return (
     <View style={styles.container}>
-      <Map pickup={pickup} drop={drop} />
+      <Map pickup={pickup} drop={drop} tripRoute={previewRoute} />
 
       {/* Top overlay */}
       <SafeAreaView edges={['top']} style={styles.topOverlay} pointerEvents="box-none">
@@ -372,6 +373,13 @@ const pickerStyles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, borderBottomWidth: 1, borderBottomColor: colors.riderBorder },
   title: { fontSize: 18, fontWeight: '800', letterSpacing: -0.5 },
   searchBox: { flexDirection: 'row', alignItems: 'center', borderWidth: 2, borderColor: colors.black, marginHorizontal: 16, marginVertical: 12, paddingHorizontal: 12, gap: 8 },
+  searchInput: { flex: 1, fontSize: 16, color: colors.black, paddingVertical: 14 },
+  inputBox: { flex: 1 },
+  empty: { textAlign: 'center', marginTop: 24, color: colors.riderTextMuted },
+  item: { flexDirection: 'row', gap: 10, padding: 14, borderBottomWidth: 1, borderBottomColor: colors.riderBorder },
+  itemText: { flex: 1, fontSize: 14, color: colors.black },
+});
+rderColor: colors.black, marginHorizontal: 16, marginVertical: 12, paddingHorizontal: 12, gap: 8 },
   searchInput: { flex: 1, fontSize: 16, color: colors.black, paddingVertical: 14 },
   inputBox: { flex: 1 },
   empty: { textAlign: 'center', marginTop: 24, color: colors.riderTextMuted },

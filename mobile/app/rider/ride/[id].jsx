@@ -23,6 +23,8 @@ export default function RiderRide() {
   const router = useRouter();
   const [ride, setRide] = useState(null);
   const [driverPos, setDriverPos] = useState(null);
+  const [tripRoute, setTripRoute] = useState(null);
+  const [liveRoute, setLiveRoute] = useState(null);
   const [rating, setRating] = useState(0);
   const [review, setReview] = useState('');
   const [paying, setPaying] = useState(false);
@@ -42,23 +44,49 @@ export default function RiderRide() {
     } catch {}
   }, [id]);
 
+  const fetchTripRoute = useCallback(async () => {
+    try {
+      const { data } = await api.get(`/rides/${id}/route?kind=trip`);
+      if (data?.coordinates?.length) setTripRoute(data.coordinates);
+    } catch {}
+  }, [id]);
+
+  const fetchLiveRoute = useCallback(async (kind) => {
+    try {
+      const { data } = await api.get(`/rides/${id}/route?kind=${kind}`);
+      if (data?.coordinates?.length) setLiveRoute(data.coordinates);
+      else setLiveRoute(null);
+    } catch {}
+  }, [id]);
+
   useEffect(() => {
     fetchRide();
     const t = setInterval(fetchRide, 4000);
     return () => clearInterval(t);
   }, [fetchRide]);
 
-  // Poll live driver location while ride is active (driver assigned + not finished)
+  // Trip route (pickup -> drop) - fetch once per ride
+  useEffect(() => {
+    if (ride?.id) fetchTripRoute();
+  }, [ride?.id, fetchTripRoute]);
+
+  // Poll live driver location + live route while ride is active
   useEffect(() => {
     if (!ride || !ride.driver_id) return;
     if (['completed', 'cancelled', 'searching'].includes(ride.status)) {
       setDriverPos(null);
+      setLiveRoute(null);
       return;
     }
-    fetchDriverLoc();
-    const t = setInterval(fetchDriverLoc, 4000);
+    const liveKind = ride.status === 'in_transit' ? 'ongoing' : 'pickup';
+    const tick = () => {
+      fetchDriverLoc();
+      fetchLiveRoute(liveKind);
+    };
+    tick();
+    const t = setInterval(tick, 4000);
     return () => clearInterval(t);
-  }, [ride?.driver_id, ride?.status, fetchDriverLoc]);
+  }, [ride?.driver_id, ride?.status, fetchDriverLoc, fetchLiveRoute]);
 
   if (!ride) {
     return (
@@ -139,6 +167,8 @@ export default function RiderRide() {
           pickup={{ lat: ride.pickup_lat, lng: ride.pickup_lng }}
           drop={{ lat: ride.drop_lat, lng: ride.drop_lng }}
           driverPos={driverPos}
+          tripRoute={tripRoute}
+          liveRoute={liveRoute}
           height={300}
         />
         {driverPos?.eta_minutes != null && (

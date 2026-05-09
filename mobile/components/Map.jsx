@@ -5,7 +5,22 @@ import { useEffect, useRef } from 'react';
 
 const AVIEMORE = { latitude: 57.1959, longitude: -3.829, latitudeDelta: 0.05, longitudeDelta: 0.05 };
 
-export default function Map({ pickup, drop, driverPos, dark = false, height, showsUserLocation = true }) {
+// Convert OSRM [[lng,lat], ...] to react-native-maps [{latitude, longitude}, ...]
+function osrmToCoords(arr) {
+  if (!Array.isArray(arr)) return [];
+  return arr.map(([lng, lat]) => ({ latitude: lat, longitude: lng }));
+}
+
+export default function Map({
+  pickup,
+  drop,
+  driverPos,
+  dark = false,
+  height,
+  showsUserLocation = true,
+  tripRoute = null,    // OSRM coordinate array [[lng,lat], ...]
+  liveRoute = null,    // OSRM coordinate array driver -> next waypoint
+}) {
   const ref = useRef(null);
 
   useEffect(() => {
@@ -22,6 +37,8 @@ export default function Map({ pickup, drop, driverPos, dark = false, height, sho
   }, [pickup, drop, driverPos]);
 
   const driverHeading = typeof driverPos?.heading === 'number' && driverPos.heading >= 0 ? driverPos.heading : 0;
+  const tripCoords = osrmToCoords(tripRoute);
+  const liveCoords = osrmToCoords(liveRoute);
 
   return (
     <View style={[styles.container, height ? { height } : { flex: 1 }]}>
@@ -66,14 +83,35 @@ export default function Map({ pickup, drop, driverPos, dark = false, height, sho
             </View>
           </Marker>
         )}
-        {pickup && drop && (
+
+        {/* Trip route: pickup -> drop, solid */}
+        {tripCoords.length >= 2 && (
+          <Polyline
+            coordinates={tripCoords}
+            strokeColor={dark ? '#DFFF00' : colors.riderCta}
+            strokeWidth={5}
+          />
+        )}
+
+        {/* Live route: driver -> next waypoint, dashed accent */}
+        {liveCoords.length >= 2 && (
+          <Polyline
+            coordinates={liveCoords}
+            strokeColor={dark ? '#FFFFFF' : colors.success}
+            strokeWidth={4}
+            lineDashPattern={[8, 6]}
+          />
+        )}
+
+        {/* Fallback straight line when no real route loaded */}
+        {tripCoords.length < 2 && pickup && drop && (
           <Polyline
             coordinates={[
               { latitude: pickup.lat, longitude: pickup.lng },
               { latitude: drop.lat, longitude: drop.lng },
             ]}
             strokeColor={dark ? '#DFFF00' : colors.riderCta}
-            strokeWidth={4}
+            strokeWidth={3}
             lineDashPattern={[6, 8]}
           />
         )}

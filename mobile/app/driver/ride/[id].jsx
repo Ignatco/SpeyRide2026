@@ -28,6 +28,7 @@ export default function DriverRide() {
   const router = useRouter();
   const [ride, setRide] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [liveRoute, setLiveRoute] = useState(null);
 
   const fetchRide = useCallback(async () => {
     try {
@@ -36,11 +37,31 @@ export default function DriverRide() {
     } catch {}
   }, [id]);
 
+  const fetchLiveRoute = useCallback(async (kind) => {
+    try {
+      const { data } = await api.get(`/rides/${id}/route?kind=${kind}`);
+      if (data?.coordinates?.length) setLiveRoute(data.coordinates);
+      else setLiveRoute(null);
+    } catch {}
+  }, [id]);
+
   useEffect(() => {
     fetchRide();
     const t = setInterval(fetchRide, 5000);
     return () => clearInterval(t);
   }, [fetchRide]);
+
+  // Live route from driver to next waypoint
+  useEffect(() => {
+    if (!ride || ['completed', 'cancelled', 'searching'].includes(ride.status)) {
+      setLiveRoute(null);
+      return;
+    }
+    const kind = ride.status === 'in_transit' ? 'ongoing' : 'pickup';
+    fetchLiveRoute(kind);
+    const t = setInterval(() => fetchLiveRoute(kind), 8000);
+    return () => clearInterval(t);
+  }, [ride?.status, fetchLiveRoute]);
 
   // Stream driver location to backend while ride is active.
   // Try background mode first; fall back to foreground watcher if denied.
