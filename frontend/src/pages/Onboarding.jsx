@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
-import { Car, User, Loader2, Calendar } from "lucide-react";
+import { Car, User, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 export default function Onboarding() {
@@ -13,21 +13,16 @@ export default function Onboarding() {
   const [role, setRole] = useState(params.get("role") || "");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
-  const [dob, setDob] = useState("");
   const [vMake, setVMake] = useState("");
   const [vModel, setVModel] = useState("");
   const [vPlate, setVPlate] = useState("");
   const [vClass, setVClass] = useState("sedan");
   const [loading, setLoading] = useState(false);
 
-  const today = new Date();
-  const maxDOBStr = `${today.getFullYear() - 16}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
-
   const submit = async () => {
     if (!role) return toast.error("Choose Rider or Driver");
     if (!firstName.trim()) return toast.error("Enter first name");
     if (!lastName.trim()) return toast.error("Enter last name");
-    if (!dob) return toast.error("Enter date of birth");
     if (role === "driver" && (!vMake || !vModel || !vPlate)) {
       return toast.error("Complete vehicle details");
     }
@@ -36,7 +31,6 @@ export default function Onboarding() {
       const { data } = await api.post("/auth/complete-profile", {
         first_name: firstName.trim(),
         last_name: lastName.trim(),
-        dob,
         role,
         vehicle_make: vMake || null,
         vehicle_model: vModel || null,
@@ -54,7 +48,7 @@ export default function Onboarding() {
 
   return (
     <div className="min-h-screen bg-white text-black px-6 py-10 max-w-md mx-auto">
-      <span className="label-eyebrow text-[#002FA7]">Step 03 / Profile</span>
+      <span className="label-eyebrow text-[#002FA7]">Step 02 / Profile</span>
       <h1 className="font-display font-black tracking-tighter text-4xl sm:text-5xl mt-3 mb-8 leading-none">
         Create your account.
       </h1>
@@ -109,24 +103,6 @@ export default function Onboarding() {
             className="w-full px-4 py-4 text-lg font-medium border-2 border-black bg-white focus:outline-none focus:border-[#002FA7]"
           />
         </div>
-      </div>
-
-      <div className="mt-6">
-        <label className="label-eyebrow text-[#52525B] mb-2 block">Date of birth</label>
-        <div className="relative">
-          <input
-            data-testid="onboarding-dob-input"
-            type="date"
-            value={dob}
-            max={maxDOBStr}
-            onChange={(e) => setDob(e.target.value)}
-            className="w-full px-4 py-4 text-lg font-medium border-2 border-black bg-white focus:outline-none focus:border-[#002FA7]"
-          />
-          <Calendar className="w-5 h-5 absolute right-4 top-1/2 -translate-y-1/2 text-[#52525B] pointer-events-none" />
-        </div>
-        <p className="text-xs text-[#52525B] mt-2">
-          {role === "driver" ? "Drivers must be 21 or older" : "Riders must be 16 or older"}
-        </p>
       </div>
 
       {role === "driver" && (
