@@ -55,7 +55,7 @@ def _twilio_client():
         return Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
     return Client(TWILIO_API_KEY_SID, TWILIO_API_KEY_SECRET, TWILIO_ACCOUNT_SID)
 
-# --- Stripe (emergentintegrations) ---
+# --- Stripe ---
 STRIPE_API_KEY = os.environ.get('STRIPE_API_KEY', '')
 
 # --- Logging ---
@@ -74,7 +74,6 @@ class VerifyOTPReq(BaseModel):
 class CompleteProfileReq(BaseModel):
     first_name: str
     last_name: str
-    dob: str  # ISO date YYYY-MM-DD
     role: Literal['rider', 'driver']
     vehicle_make: Optional[str] = None
     vehicle_model: Optional[str] = None
@@ -87,8 +86,7 @@ class User(BaseModel):
     phone: str
     first_name: Optional[str] = None
     last_name: Optional[str] = None
-    name: Optional[str] = None  # computed full name for display / legacy
-    dob: Optional[str] = None
+    name: Optional[str] = None
     role: Optional[Literal['rider', 'driver']] = None
     avatar_url: Optional[str] = None
     rating: float = 5.0
@@ -143,12 +141,23 @@ class Ride(BaseModel):
     fare: float
     payment_method: str
     payment_status: str = 'unpaid'  # unpaid | paid
-    status: str = 'searching'  # searching | accepted | arrived | in_transit | completed | cancelled
+    status: str = 'searching'       # searching | accepted | arrived | in_transit | completed | cancelled
     rating: Optional[int] = None
     review: Optional[str] = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     accepted_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
+
+# FIX: strict status transitions — only legal moves allowed
+# cancelled is reachable from searching, accepted (grace period)
+ALLOWED_TRANSITIONS: Dict[str, List[str]] = {
+    "searching":  ["accepted", "cancelled"],
+    "accepted":   ["arrived",  "cancelled"],
+    "arrived":    ["in_transit"],
+    "in_transit": ["completed"],
+    "completed":  [],
+    "cancelled":  [],
+}
 
 class StatusUpdateReq(BaseModel):
     status: Literal['arrived', 'in_transit', 'completed', 'cancelled']
@@ -204,19 +213,18 @@ def _haversine_km(lat1, lng1, lat2, lng2) -> float:
     return R * c
 
 VEHICLE_CONFIG = {
-    "mini": {"base": 2.5, "per_km": 1.1, "per_min": 0.15, "label": "Mini"},
-    "sedan": {"base": 3.5, "per_km": 1.5, "per_min": 0.2, "label": "Sedan"},
-    "suv": {"base": 5.0, "per_km": 2.2, "per_min": 0.3, "label": "SUV"},
+    "mini":  {"base": 2.5, "per_km": 1.1, "per_min": 0.15, "label": "Mini"},
+    "sedan": {"base": 3.5, "per_km": 1.5, "per_min": 0.20, "label": "Sedan"},
+    "suv":   {"base": 5.0, "per_km": 2.2, "per_min": 0.30, "label": "SUV"},
 }
 
 def _calc_fare(distance_km: float, vehicle_class: str) -> Dict[str, Any]:
     cfg = VEHICLE_CONFIG[vehicle_class]
-    duration_min = max(3, int(distance_km * 2.5))  # rough estimate
+    duration_min = max(3, int(distance_km * 2.5))
     fare = cfg["base"] + (distance_km * cfg["per_km"]) + (duration_min * cfg["per_min"])
     return {"fare": round(fare, 2), "duration_min": duration_min, "distance_km": round(distance_km, 2)}
 
 def _serialize(doc: dict) -> dict:
-    """Convert datetime fields to iso string in a copied dict for safe response."""
     if not doc:
         return doc
     out = {k: v for k, v in doc.items() if k != "_id"}
@@ -227,10 +235,9 @@ def _serialize(doc: dict) -> dict:
 
 # ==================== ROUTING (OSRM) ====================
 OSRM_BASE = os.environ.get("OSRM_BASE", "https://router.project-osrm.org")
-_route_cache: Dict[str, Dict[str, Any]] = {}  # cache_key -> {result, expires_at}
+_route_cache: Dict[str, Dict[str, Any]] = {}
 
 async def _fetch_route(coords: List[Dict[str, float]]) -> Optional[Dict[str, Any]]:
-    """Call OSRM driving route API. Coords: [{lat, lng}, ...]. Returns geojson + meta or None."""
     if len(coords) < 2:
         return None
     pairs = ";".join(f"{c['lng']},{c['lat']}" for c in coords)
@@ -246,7 +253,7 @@ async def _fetch_route(coords: List[Dict[str, float]]) -> Optional[Dict[str, Any
         route = data["routes"][0]
         geometry = route.get("geometry", {})
         return {
-            "coordinates": geometry.get("coordinates", []),  # [[lng, lat], ...]
+            "coordinates": geometry.get("coordinates", []),
             "distance_m": route.get("distance", 0),
             "duration_s": route.get("duration", 0),
         }
@@ -271,23 +278,19 @@ def _cache_set(key: str, data: dict, ttl_s: int = 60):
 
 # ==================== AUTH ROUTES ====================
 
-# In-memory dev OTP store {phone: code}
 _dev_otps: Dict[str, str] = {}
 
-# ---- Rate limiting state (in-memory, per-process) ----
-# Send: per phone & per IP
-_send_history: Dict[str, List[float]] = {}      # key="phone:+1..." or "ip:1.2.3.4" -> list of unix ts
-_send_cooldown: Dict[str, float] = {}           # phone -> next-allowed unix ts
-# Verify attempts: per phone (lockout on too many wrong codes)
-_verify_attempts: Dict[str, List[float]] = {}   # phone -> list of failed-attempt timestamps
-_verify_lockout: Dict[str, float] = {}          # phone -> locked-until unix ts
+_send_history: Dict[str, List[float]] = {}
+_send_cooldown: Dict[str, float] = {}
+_verify_attempts: Dict[str, List[float]] = {}
+_verify_lockout: Dict[str, float] = {}
 
-SEND_COOLDOWN_SEC = 30          # min seconds between consecutive sends to same phone
-SEND_PHONE_HOURLY = 5           # max sends per phone per hour
-SEND_IP_HOURLY = 15             # max sends per IP per hour
-VERIFY_MAX_FAILS = 5            # wrong codes before lockout
-VERIFY_FAIL_WINDOW_SEC = 15 * 60  # rolling window for failed attempts
-VERIFY_LOCKOUT_SEC = 15 * 60    # how long to lock out
+SEND_COOLDOWN_SEC = 30
+SEND_PHONE_HOURLY = 5
+SEND_IP_HOURLY = 15
+VERIFY_MAX_FAILS = 5
+VERIFY_FAIL_WINDOW_SEC = 15 * 60
+VERIFY_LOCKOUT_SEC = 15 * 60
 
 def _now() -> float:
     return datetime.now(timezone.utc).timestamp()
@@ -303,22 +306,18 @@ def _client_ip(request: Request) -> str:
 
 def _check_send_limits(phone: str, ip: str):
     now = _now()
-    # Cooldown
     nxt = _send_cooldown.get(phone, 0)
     if now < nxt:
         wait = int(nxt - now)
         raise HTTPException(429, f"Please wait {wait}s before requesting another code")
-    # Per-phone hourly
     p_key = f"phone:{phone}"
     p_hist = _prune(_send_history.get(p_key, []), 3600, now)
     if len(p_hist) >= SEND_PHONE_HOURLY:
         raise HTTPException(429, "Too many code requests for this phone. Try again in an hour.")
-    # Per-IP hourly
     i_key = f"ip:{ip}"
     i_hist = _prune(_send_history.get(i_key, []), 3600, now)
     if len(i_hist) >= SEND_IP_HOURLY:
         raise HTTPException(429, "Too many code requests from this device. Try again in an hour.")
-    # Record
     p_hist.append(now)
     i_hist.append(now)
     _send_history[p_key] = p_hist
@@ -339,7 +338,7 @@ def _record_verify_failure(phone: str):
     _verify_attempts[phone] = arr
     if len(arr) >= VERIFY_MAX_FAILS:
         _verify_lockout[phone] = now + VERIFY_LOCKOUT_SEC
-        _verify_attempts[phone] = []  # reset window after locking
+        _verify_attempts[phone] = []
 
 def _record_verify_success(phone: str):
     _verify_attempts.pop(phone, None)
@@ -362,12 +361,10 @@ async def send_otp(req: SendOTPReq, request: Request):
             client.verify.v2.services(TWILIO_VERIFY_SERVICE_SID).verifications.create(
                 to=phone, channel="sms"
             )
-            # Clear any stale dev OTP from prior failed attempts so verify uses Twilio path
             _dev_otps.pop(phone, None)
             return {"sent": True, "mode": "twilio"}
         except Exception as e:
             logger.error(f"Twilio send failed: {e}; falling back to dev OTP")
-    # Dev fallback
     code = f"{random.randint(100000, 999999)}"
     _dev_otps[phone] = code
     logger.info(f"[DEV OTP] {phone} -> {code}")
@@ -380,7 +377,6 @@ async def verify_otp(req: VerifyOTPReq):
     _check_verify_lockout(phone)
 
     verified = False
-    # Always try Twilio first when configured
     if _twilio_ready():
         try:
             client = _twilio_client()
@@ -390,8 +386,6 @@ async def verify_otp(req: VerifyOTPReq):
             verified = check.status == "approved"
         except Exception as e:
             logger.error(f"Twilio verify failed: {e}")
-            # fall through to dev OTP check
-    # Dev OTP fallback (covers: Twilio not configured, Twilio rejected, or transient error)
     if not verified:
         expected = _dev_otps.get(phone)
         if expected is not None and expected == code:
@@ -404,7 +398,6 @@ async def verify_otp(req: VerifyOTPReq):
 
     _record_verify_success(phone)
 
-    # Find or create user (without role yet)
     user = await db.users.find_one({"phone": phone}, {"_id": 0})
     if not user:
         new_user = User(id=str(uuid.uuid4()), phone=phone)
@@ -417,30 +410,28 @@ async def verify_otp(req: VerifyOTPReq):
     return {
         "token": token,
         "user": _serialize(user),
-        "needs_profile": not user.get("role") or not user.get("first_name") or not user.get("dob"),
+        # FIX: needs_profile no longer requires dob
+        "needs_profile": not user.get("role") or not user.get("first_name"),
     }
 
 @api_router.post("/auth/complete-profile")
 async def complete_profile(req: CompleteProfileReq, current_user: dict = Depends(get_current_user)):
-    # Validate DOB & age
-    try:
-        dob_date = datetime.strptime(req.dob, "%Y-%m-%d").date()
-    except ValueError:
-        raise HTTPException(400, "Invalid date of birth (use YYYY-MM-DD)")
-    today = datetime.now(timezone.utc).date()
-    age = today.year - dob_date.year - ((today.month, today.day) < (dob_date.month, dob_date.day))
-    min_age = 21 if req.role == "driver" else 16
-    if age < min_age:
-        raise HTTPException(400, f"You must be at least {min_age} years old to register as a {req.role}")
-    if age > 110:
-        raise HTTPException(400, "Invalid date of birth")
+    # FIX: lock role once set — cannot flip rider↔driver
+    existing_role = current_user.get("role")
+    if existing_role and existing_role != req.role:
+        raise HTTPException(400, f"Role already set to '{existing_role}' and cannot be changed")
+
+    # FIX: require vehicle fields when role=driver
+    if req.role == "driver":
+        missing = [f for f in ["vehicle_make", "vehicle_model", "vehicle_plate"] if not getattr(req, f)]
+        if missing:
+            raise HTTPException(400, f"Missing required driver fields: {', '.join(missing)}")
 
     full_name = f"{req.first_name.strip()} {req.last_name.strip()}".strip()
     update = {
         "first_name": req.first_name.strip(),
         "last_name": req.last_name.strip(),
         "name": full_name,
-        "dob": req.dob,
         "role": req.role,
     }
     if req.role == "driver":
@@ -555,7 +546,6 @@ async def driver_location(req: DriverLocationReq, current_user: dict = Depends(g
 
 @api_router.get("/rides/{ride_id}/driver-location")
 async def ride_driver_location(ride_id: str, current_user: dict = Depends(get_current_user)):
-    """Live driver location + ETA for a specific ride. Visible to ride's rider or driver."""
     ride = await db.rides.find_one({"id": ride_id}, {"_id": 0})
     if not ride:
         raise HTTPException(404, "Ride not found")
@@ -570,15 +560,13 @@ async def ride_driver_location(ride_id: str, current_user: dict = Depends(get_cu
     if not driver or driver.get("current_lat") is None:
         return {"location": None}
 
-    # Compute distance + ETA to next waypoint based on ride state
     if ride["status"] in ("accepted", "arrived"):
         target_lat, target_lng = ride["pickup_lat"], ride["pickup_lng"]
         target = "pickup"
-    else:  # in_transit
+    else:
         target_lat, target_lng = ride["drop_lat"], ride["drop_lng"]
         target = "drop"
 
-    # Try OSRM real-road duration first; fall back to haversine
     distance_km = _haversine_km(driver["current_lat"], driver["current_lng"], target_lat, target_lng)
     eta_minutes = max(1, round(distance_km / 35.0 * 60))
     rlat = round(driver["current_lat"], 4)
@@ -616,12 +604,6 @@ async def ride_driver_location(ride_id: str, current_user: dict = Depends(get_cu
 
 @api_router.get("/rides/{ride_id}/route")
 async def ride_route(ride_id: str, kind: str = "trip", current_user: dict = Depends(get_current_user)):
-    """
-    Real road-following route for a ride.
-    kind=trip      : pickup -> drop (full itinerary, immutable per ride)
-    kind=pickup    : driver_current -> pickup (live, refreshes as driver moves)
-    kind=ongoing   : driver_current -> drop (during in_transit)
-    """
     ride = await db.rides.find_one({"id": ride_id}, {"_id": 0})
     if not ride:
         raise HTTPException(404, "Ride not found")
@@ -646,10 +628,9 @@ async def ride_route(ride_id: str, kind: str = "trip", current_user: dict = Depe
             "duration_min": max(1, round(route["duration_s"] / 60)),
             "kind": "trip",
         }
-        _cache_set(cache_key, result, ttl_s=24 * 3600)  # immutable
+        _cache_set(cache_key, result, ttl_s=24 * 3600)
         return result
 
-    # Live routes (pickup or ongoing)
     if not ride.get("driver_id") or ride["status"] in ("completed", "cancelled", "searching"):
         return {"coordinates": [], "distance_km": 0, "duration_min": 0, "fallback": True}
     driver = await db.users.find_one(
@@ -666,7 +647,6 @@ async def ride_route(ride_id: str, kind: str = "trip", current_user: dict = Depe
     else:
         raise HTTPException(400, "kind must be trip, pickup, or ongoing")
 
-    # Round driver lat/lng for cache key (50m granularity)
     rlat = round(driver["current_lat"], 4)
     rlng = round(driver["current_lng"], 4)
     cache_key = f"{kind}:{ride_id}:{rlat},{rlng}"
@@ -676,7 +656,6 @@ async def ride_route(ride_id: str, kind: str = "trip", current_user: dict = Depe
     coords = [{"lat": driver["current_lat"], "lng": driver["current_lng"]}, target]
     route = await _fetch_route(coords)
     if not route:
-        # Fallback to haversine straight-line
         d = _haversine_km(driver["current_lat"], driver["current_lng"], target["lat"], target["lng"])
         return {
             "coordinates": [
@@ -694,7 +673,7 @@ async def ride_route(ride_id: str, kind: str = "trip", current_user: dict = Depe
         "duration_min": max(1, round(route["duration_s"] / 60)),
         "kind": kind,
     }
-    _cache_set(cache_key, result, ttl_s=20)  # 20s for live routes
+    _cache_set(cache_key, result, ttl_s=20)
     return result
 
 @api_router.get("/driver/requests")
@@ -746,13 +725,21 @@ async def update_ride_status(ride_id: str, req: StatusUpdateReq, current_user: d
     if not (is_driver or is_rider):
         raise HTTPException(403, "Forbidden")
 
+    current_status = ride["status"]
     new_status = req.status
+
+    # FIX: validate legal transition
+    allowed = ALLOWED_TRANSITIONS.get(current_status, [])
+    if new_status not in allowed:
+        raise HTTPException(400, f"Cannot transition from '{current_status}' to '{new_status}'")
+
+    # FIX: only driver can advance trip states; rider can only cancel
+    if new_status in ("arrived", "in_transit", "completed") and not is_driver:
+        raise HTTPException(403, "Only the driver can advance trip status")
+
     update = {"status": new_status}
     if new_status == "completed":
-        if not is_driver:
-            raise HTTPException(403, "Only driver can complete")
         update["completed_at"] = _utcnow_iso()
-        # increment driver earnings & ride count
         await db.users.update_one(
             {"id": ride["driver_id"]},
             {"$inc": {"earnings_total": ride["fare"], "rides_count": 1}}
@@ -761,8 +748,7 @@ async def update_ride_status(ride_id: str, req: StatusUpdateReq, current_user: d
             {"id": ride["rider_id"]},
             {"$inc": {"rides_count": 1}}
         )
-    if new_status == "cancelled" and ride["status"] in ("completed",):
-        raise HTTPException(400, "Already completed")
+
     await db.rides.update_one({"id": ride_id}, {"$set": update})
     ride = await db.rides.find_one({"id": ride_id}, {"_id": 0})
     return {"ride": _serialize(ride)}
@@ -776,8 +762,11 @@ async def rate_ride(ride_id: str, req: RatingReq, current_user: dict = Depends(g
         raise HTTPException(403, "Only rider can rate")
     if ride["status"] != "completed":
         raise HTTPException(400, "Ride not completed")
+    # FIX: idempotency — block second rating
+    if ride.get("rating") is not None:
+        raise HTTPException(400, "Ride already rated")
+
     await db.rides.update_one({"id": ride_id}, {"$set": {"rating": req.rating, "review": req.review}})
-    # Update driver avg rating
     if ride.get("driver_id"):
         agg = db.rides.aggregate([
             {"$match": {"driver_id": ride["driver_id"], "rating": {"$ne": None}}},
@@ -813,17 +802,18 @@ async def create_checkout(ride_id: str, request: Request, current_user: dict = D
     success_url = f"{origin}/rider/ride/{ride_id}?session_id={{CHECKOUT_SESSION_ID}}"
     cancel_url = f"{origin}/rider/ride/{ride_id}"
 
-    amount = float(ride["fare"])  # backend authoritative
+    amount = float(ride["fare"])
     metadata = {"ride_id": ride_id, "user_id": current_user["id"]}
 
-    req = CheckoutSessionRequest(
+    req_obj = CheckoutSessionRequest(
         amount=amount,
-        currency="usd",
+        # FIX: use GBP consistently throughout
+        currency="gbp",
         success_url=success_url,
         cancel_url=cancel_url,
         metadata=metadata,
     )
-    session = await stripe.create_checkout_session(req)
+    session = await stripe.create_checkout_session(req_obj)
 
     txn = {
         "id": str(uuid.uuid4()),
@@ -850,7 +840,6 @@ async def payment_status(session_id: str, request: Request, current_user: dict =
     if txn["user_id"] != current_user["id"]:
         raise HTTPException(403, "Forbidden")
 
-    # If already finalized, return cached state
     if txn.get("payment_status") == "paid":
         return {"payment_status": "paid", "status": txn.get("status", "complete")}
 
@@ -860,6 +849,7 @@ async def payment_status(session_id: str, request: Request, current_user: dict =
     try:
         status = await stripe.get_checkout_status(session_id)
     except Exception as e:
+        # FIX: gracefully handle Stripe errors instead of 500
         logger.error(f"Stripe status fetch failed for {session_id}: {e}")
         return {"payment_status": txn.get("payment_status", "pending"), "status": txn.get("status", "open")}
 

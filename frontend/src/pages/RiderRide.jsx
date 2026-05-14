@@ -6,13 +6,16 @@ import { Phone, Star, X, Loader2, ArrowLeft, CheckCircle2, CreditCard, Banknote 
 import { toast } from "sonner";
 
 const STATUS_LABELS = {
-  searching: { label: "Finding driver…", color: "#002FA7", pulse: true },
-  accepted: { label: "Driver on the way", color: "#002FA7", pulse: false },
-  arrived: { label: "Driver has arrived", color: "#00E676", pulse: false },
-  in_transit: { label: "On the way to destination", color: "#002FA7", pulse: false },
-  completed: { label: "Trip completed", color: "#0A0A0A", pulse: false },
-  cancelled: { label: "Cancelled", color: "#FF2B2B", pulse: false },
+  searching:  { label: "Finding driver…",            color: "#002FA7", pulse: true  },
+  accepted:   { label: "Driver on the way",           color: "#002FA7", pulse: false },
+  arrived:    { label: "Driver has arrived",          color: "#00E676", pulse: false },
+  in_transit: { label: "On the way to destination",  color: "#002FA7", pulse: false },
+  completed:  { label: "Trip completed",             color: "#0A0A0A", pulse: false },
+  cancelled:  { label: "Cancelled",                  color: "#FF2B2B", pulse: false },
 };
+
+// FIX: rider can cancel in searching OR accepted (grace period, like Uber)
+const RIDER_CANCELLABLE = ["searching", "accepted"];
 
 function StarRow({ value, onChange, size = 36 }) {
   return (
@@ -40,19 +43,36 @@ export default function RiderRide() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const [ride, setRide] = useState(null);
+  const [driverPos, setDriverPos] = useState(null);
+  const [tripRoute, setTripRoute] = useState(null);
   const [rating, setRating] = useState(0);
   const [review, setReview] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [paying, setPaying] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
   const sessionId = params.get("session_id");
 
   const fetchRide = useCallback(async () => {
     try {
       const { data } = await api.get(`/rides/${id}`);
       setRide(data.ride);
-    } catch (e) {
+    } catch {
       toast.error("Could not load ride");
     }
+  }, [id]);
+
+  const fetchDriverPos = useCallback(async () => {
+    try {
+      const { data } = await api.get(`/rides/${id}/driver-location`);
+      setDriverPos(data.location);
+    } catch {}
+  }, [id]);
+
+  const fetchTripRoute = useCallback(async () => {
+    try {
+      const { data } = await api.get(`/rides/${id}/route?kind=trip`);
+      if (data?.coordinates?.length) setTripRoute(data.coordinates);
+    } catch {}
   }, [id]);
 
   useEffect(() => {
@@ -60,6 +80,22 @@ export default function RiderRide() {
     const t = setInterval(fetchRide, 4000);
     return () => clearInterval(t);
   }, [fetchRide]);
+
+  useEffect(() => {
+    if (ride?.id) fetchTripRoute();
+  }, [ride?.id, fetchTripRoute]);
+
+  useEffect(() => {
+    if (!ride?.driver_id) return;
+    if (["completed", "cancelled", "searching"].includes(ride.status)) {
+      setDriverPos(null);
+      return;
+    }
+    const tick = () => fetchDriverPos();
+    tick();
+    const t = setInterval(tick, 4000);
+    return () => clearInterval(t);
+  }, [ride?.driver_id, ride?.status, fetchDriverPos]);
 
   // Stripe redirect handler
   useEffect(() => {
@@ -79,8 +115,7 @@ export default function RiderRide() {
           return;
         }
         setTimeout(poll, 2000);
-      } catch (e) {
-        // try again
+      } catch {
         if (attempts < 6) setTimeout(poll, 2000);
       }
     };
@@ -98,11 +133,14 @@ export default function RiderRide() {
 
   const cancelRide = async () => {
     if (!window.confirm("Cancel this ride?")) return;
+    setCancelling(true);
     try {
       await api.post(`/rides/${ride.id}/status`, { status: "cancelled" });
       navigate("/rider");
     } catch (e) {
-      toast.error("Cancel failed");
+      toast.error(e.response?.data?.detail || "Cancel failed");
+    } finally {
+      setCancelling(false);
     }
   };
 
@@ -133,9 +171,7 @@ export default function RiderRide() {
     }
   };
 
-  const markCashPaid = async () => {
-    // For cash, we'll just allow rating. Mark fictitious paid client-side via a request? Actually rider can't mark — we treat unpaid cash as paid on completion.
-    // Provide a "I've paid" button that updates local UI; backend already considers cash flow as fine.
+  const markCashPaid = () => {
     setRide({ ...ride, payment_status: "paid" });
     toast.success("Cash recorded");
   };
@@ -145,6 +181,8 @@ export default function RiderRide() {
   const needsPayment = isCompleted && ride.payment_status !== "paid";
   const canRate = isCompleted && ride.payment_status === "paid" && !ride.rating;
   const isRated = isCompleted && ride.rating;
+  // FIX: allow cancel from searching OR accepted
+  const canCancel = RIDER_CANCELLABLE.includes(ride.status);
 
   return (
     <div className="min-h-screen bg-white text-black flex flex-col">
@@ -153,9 +191,11 @@ export default function RiderRide() {
         <MapView
           pickup={{ lat: ride.pickup_lat, lng: ride.pickup_lng }}
           drop={{ lat: ride.drop_lat, lng: ride.drop_lng }}
+          driverPos={driverPos}
+          routeCoords={tripRoute}
           dark={false}
         />
-        {ride.status === "searching" && (
+        {(ride.status === "searching" || ride.status === "accepted") && (
           <button
             onClick={() => navigate("/rider")}
             className="absolute top-4 left-4 bg-white border-2 border-black p-2 z-30"
@@ -164,11 +204,23 @@ export default function RiderRide() {
             <ArrowLeft className="w-5 h-5" strokeWidth={2.5} />
           </button>
         )}
+        {/* Driver ETA badge */}
+        {driverPos?.eta_minutes != null && (
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-30 bg-black text-white px-3 py-2 flex items-center gap-2 text-xs font-bold">
+            <span className="w-2 h-2 rounded-full bg-[#00E676]" />
+            {driverPos.target === "pickup" ? "Driver " : "Arriving in "}
+            {driverPos.eta_minutes} min · {driverPos.distance_km} km away
+          </div>
+        )}
       </div>
 
       <div className="flex-1 px-5 pt-5 pb-10 max-w-md mx-auto w-full">
         {/* Status banner */}
-        <div className="border-2 border-black p-4 mb-4 flex items-center justify-between" style={{ borderColor: status.color }} data-testid="ride-status-banner">
+        <div
+          className="border-2 p-4 mb-4 flex items-center justify-between"
+          style={{ borderColor: status.color }}
+          data-testid="ride-status-banner"
+        >
           <div>
             <div className="label-eyebrow text-[#52525B]">Status</div>
             <div className="font-display font-black text-2xl tracking-tighter" style={{ color: status.color }}>
@@ -184,7 +236,9 @@ export default function RiderRide() {
             <span className="label-eyebrow text-[#52525B]">Your driver</span>
             <div className="flex items-center justify-between mt-2">
               <div>
-                <div className="font-display font-bold text-xl tracking-tight" data-testid="driver-name">{ride.driver_name}</div>
+                <div className="font-display font-bold text-xl tracking-tight" data-testid="driver-name">
+                  {ride.driver_name}
+                </div>
                 <div className="text-sm text-[#52525B]">
                   {ride.driver_vehicle} · <span className="font-mono">{ride.driver_plate}</span>
                 </div>
@@ -227,19 +281,26 @@ export default function RiderRide() {
             </div>
             <div>
               <div className="label-eyebrow text-[#52525B]">Fare</div>
-              <div className="font-display font-bold text-[#002FA7]" data-testid="ride-fare">£{ride.fare.toFixed(2)}</div>
+              <div className="font-display font-bold text-[#002FA7]" data-testid="ride-fare">
+                £{ride.fare.toFixed(2)}
+              </div>
             </div>
           </div>
         </div>
 
-        {/* Cancel for searching */}
-        {ride.status === "searching" && (
+        {/* FIX: cancel available from searching AND accepted */}
+        {canCancel && (
           <button
             onClick={cancelRide}
+            disabled={cancelling}
             data-testid="cancel-ride-btn"
-            className="w-full py-4 border-2 border-black text-black font-display font-bold tracking-tight inline-flex items-center justify-center gap-2 hover:bg-[#FF2B2B] hover:text-white hover:border-[#FF2B2B] transition-all"
+            className="w-full py-4 border-2 border-black text-black font-display font-bold tracking-tight inline-flex items-center justify-center gap-2 hover:bg-[#FF2B2B] hover:text-white hover:border-[#FF2B2B] transition-all disabled:opacity-50 mb-4"
           >
-            <X className="w-5 h-5" strokeWidth={2.5} /> Cancel ride
+            {cancelling
+              ? <Loader2 className="w-5 h-5 animate-spin" />
+              : <X className="w-5 h-5" strokeWidth={2.5} />
+            }
+            {ride.status === "accepted" ? "Cancel (driver not yet arrived)" : "Cancel ride"}
           </button>
         )}
 
@@ -296,7 +357,7 @@ export default function RiderRide() {
               className="w-full mt-3 py-4 bg-[#002FA7] text-white font-display font-bold tracking-tight inline-flex items-center justify-center gap-2 hover:-translate-y-[2px] hover:shadow-[6px_6px_0_0_#0A0A0A] transition-all disabled:opacity-50"
             >
               {submitting && <Loader2 className="w-5 h-5 animate-spin" />}
-              Submit
+              Submit rating
             </button>
           </div>
         )}

@@ -13,7 +13,8 @@ export default function Landing() {
 
   useEffect(() => {
     if (loading || !user) return;
-    if (!user.role || !user.first_name || !user.dob) {
+    // FIX: removed dob check — only role and first_name required now
+    if (!user.role || !user.first_name) {
       router.replace('/onboarding');
     } else {
       router.replace(user.role === 'driver' ? '/driver' : '/rider');
@@ -40,7 +41,8 @@ export default function Landing() {
           <Text style={styles.h1}>The Highlands,</Text>
           <Text style={[styles.h1, { color: colors.riderCta }]}>on demand.</Text>
           <Text style={styles.body}>
-            Local taxis from Aviemore to Inverness, Cairngorm Mountain, Loch Morlich and beyond. Tap, ride, pay — no fluff, just transit.
+            Local taxis from Aviemore to Inverness, Cairngorm Mountain, Loch Morlich and beyond.
+            Tap, ride, pay — no fluff, just transit.
           </Text>
 
           <View style={styles.cta}>
@@ -98,7 +100,7 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   brandName: { fontSize: 18, fontWeight: '900', letterSpacing: -1 },
-  signin: { fontSize: 11, fontWeight: '700', letterSpacing: 2, color: colors.riderText },
+  signin: { fontSize: 11, fontWeight: '700', letterSpacing: 2, color: colors.riderCta },
 
   hero: { paddingHorizontal: 24, paddingVertical: 40 },
   eyebrow: {

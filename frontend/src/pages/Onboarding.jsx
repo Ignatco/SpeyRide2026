@@ -23,24 +23,29 @@ export default function Onboarding() {
     if (!role) return toast.error("Choose Rider or Driver");
     if (!firstName.trim()) return toast.error("Enter first name");
     if (!lastName.trim()) return toast.error("Enter last name");
-    if (role === "driver" && (!vMake || !vModel || !vPlate)) {
-      return toast.error("Complete vehicle details");
+    if (role === "driver") {
+      if (!vMake.trim()) return toast.error("Enter vehicle make");
+      if (!vModel.trim()) return toast.error("Enter vehicle model");
+      if (!vPlate.trim()) return toast.error("Enter license plate");
     }
     setLoading(true);
     try {
-      const { data } = await api.post("/auth/complete-profile", {
+      const payload = {
         first_name: firstName.trim(),
         last_name: lastName.trim(),
         role,
-        vehicle_make: vMake || null,
-        vehicle_model: vModel || null,
-        vehicle_plate: vPlate || null,
-        vehicle_class: role === "driver" ? vClass : null,
-      });
+      };
+      if (role === "driver") {
+        payload.vehicle_make = vMake.trim();
+        payload.vehicle_model = vModel.trim();
+        payload.vehicle_plate = vPlate.trim().toUpperCase();
+        payload.vehicle_class = vClass;
+      }
+      const { data } = await api.post("/auth/complete-profile", payload);
       setUser(data.user);
       navigate(role === "driver" ? "/driver" : "/rider");
     } catch (e) {
-      toast.error(e.response?.data?.detail || "Failed");
+      toast.error(e.response?.data?.detail || "Failed to create profile");
     } finally {
       setLoading(false);
     }
@@ -53,6 +58,7 @@ export default function Onboarding() {
         Create your account.
       </h1>
 
+      {/* Role selector */}
       <div className="grid grid-cols-2 gap-3 mb-8">
         <button
           onClick={() => setRole("rider")}
@@ -82,7 +88,8 @@ export default function Onboarding() {
         </button>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      {/* Name fields */}
+      <div className="grid grid-cols-2 gap-3 mb-4">
         <div>
           <label className="label-eyebrow text-[#52525B] mb-2 block">First name</label>
           <input
@@ -105,32 +112,42 @@ export default function Onboarding() {
         </div>
       </div>
 
+      {/* Driver vehicle fields */}
       {role === "driver" && (
-        <div className="space-y-4 mt-6 border-t-2 border-black pt-6">
+        <div className="space-y-4 mt-2 border-t-2 border-black pt-6">
           <span className="label-eyebrow text-[#52525B]">Vehicle details</span>
           <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="label-eyebrow text-[#52525B] mb-2 block">Make</label>
+              <input
+                data-testid="vehicle-make-input"
+                placeholder="Toyota"
+                value={vMake}
+                onChange={(e) => setVMake(e.target.value)}
+                className="w-full px-3 py-3 border-2 border-black bg-white focus:outline-none focus:border-[#002FA7]"
+              />
+            </div>
+            <div>
+              <label className="label-eyebrow text-[#52525B] mb-2 block">Model</label>
+              <input
+                data-testid="vehicle-model-input"
+                placeholder="Camry"
+                value={vModel}
+                onChange={(e) => setVModel(e.target.value)}
+                className="w-full px-3 py-3 border-2 border-black bg-white focus:outline-none focus:border-[#002FA7]"
+              />
+            </div>
+          </div>
+          <div>
+            <label className="label-eyebrow text-[#52525B] mb-2 block">License plate</label>
             <input
-              data-testid="vehicle-make-input"
-              placeholder="Make (Toyota)"
-              value={vMake}
-              onChange={(e) => setVMake(e.target.value)}
-              className="px-3 py-3 border-2 border-black bg-white focus:outline-none focus:border-[#002FA7]"
-            />
-            <input
-              data-testid="vehicle-model-input"
-              placeholder="Model (Camry)"
-              value={vModel}
-              onChange={(e) => setVModel(e.target.value)}
-              className="px-3 py-3 border-2 border-black bg-white focus:outline-none focus:border-[#002FA7]"
+              data-testid="vehicle-plate-input"
+              placeholder="AB12 CDE"
+              value={vPlate}
+              onChange={(e) => setVPlate(e.target.value.toUpperCase())}
+              className="w-full px-3 py-3 border-2 border-black bg-white focus:outline-none focus:border-[#002FA7] uppercase tracking-widest font-mono"
             />
           </div>
-          <input
-            data-testid="vehicle-plate-input"
-            placeholder="License plate"
-            value={vPlate}
-            onChange={(e) => setVPlate(e.target.value.toUpperCase())}
-            className="w-full px-3 py-3 border-2 border-black bg-white focus:outline-none focus:border-[#002FA7] uppercase tracking-widest font-mono"
-          />
           <div>
             <span className="label-eyebrow text-[#52525B] mb-2 block">Vehicle class</span>
             <div className="grid grid-cols-3 gap-2">
@@ -140,7 +157,9 @@ export default function Onboarding() {
                   onClick={() => setVClass(c)}
                   data-testid={`vehicle-class-${c}-btn`}
                   className={`py-3 border-2 font-display font-bold text-sm uppercase tracking-wide transition-all ${
-                    vClass === c ? "border-[#002FA7] bg-[#002FA7] text-white" : "border-black bg-white"
+                    vClass === c
+                      ? "border-[#002FA7] bg-[#002FA7] text-white"
+                      : "border-black bg-white hover:border-[#002FA7]"
                   }`}
                 >
                   {c}

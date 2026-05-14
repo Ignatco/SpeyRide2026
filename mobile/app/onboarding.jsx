@@ -1,165 +1,278 @@
-import { useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
-import { api } from "@/lib/api";
-import { useAuth } from "@/context/AuthContext";
-import { Car, User, Loader2 } from "lucide-react";
-import { toast } from "sonner";
+import { useState } from 'react';
+import {
+  View, Text, StyleSheet, Pressable, Alert,
+  ScrollView, KeyboardAvoidingView, Platform, TextInput,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter, useLocalSearchParams } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import { api } from '../lib/api';
+import { useAuth } from '../context/AuthContext';
+import { colors } from '../lib/theme';
+
+const VEHICLE_CLASSES = ['mini', 'sedan', 'suv'];
 
 export default function Onboarding() {
-  const [params] = useSearchParams();
-  const navigate = useNavigate();
+  const router = useRouter();
+  const params = useLocalSearchParams();
+  const intendedRole = params.role;
   const { setUser } = useAuth();
 
-  const [role, setRole] = useState(params.get("role") || "");
-  const [firstName, setFirstName] = useState("");
-  const [lastName, setLastName] = useState("");
-  const [vMake, setVMake] = useState("");
-  const [vModel, setVModel] = useState("");
-  const [vPlate, setVPlate] = useState("");
-  const [vClass, setVClass] = useState("sedan");
+  const [role, setRole] = useState(intendedRole || '');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [vMake, setVMake] = useState('');
+  const [vModel, setVModel] = useState('');
+  const [vPlate, setVPlate] = useState('');
+  const [vClass, setVClass] = useState('sedan');
   const [loading, setLoading] = useState(false);
 
   const submit = async () => {
-    if (!role) return toast.error("Choose Rider or Driver");
-    if (!firstName.trim()) return toast.error("Enter first name");
-    if (!lastName.trim()) return toast.error("Enter last name");
-    if (role === "driver" && (!vMake || !vModel || !vPlate)) {
-      return toast.error("Complete vehicle details");
+    if (!role) return Alert.alert('Missing', 'Choose Rider or Driver');
+    if (!firstName.trim()) return Alert.alert('Missing', 'Enter your first name');
+    if (!lastName.trim()) return Alert.alert('Missing', 'Enter your last name');
+    if (role === 'driver') {
+      if (!vMake.trim()) return Alert.alert('Missing', 'Enter vehicle make');
+      if (!vModel.trim()) return Alert.alert('Missing', 'Enter vehicle model');
+      if (!vPlate.trim()) return Alert.alert('Missing', 'Enter license plate');
     }
+
     setLoading(true);
     try {
-      const { data } = await api.post("/auth/complete-profile", {
+      const payload = {
         first_name: firstName.trim(),
         last_name: lastName.trim(),
         role,
-        vehicle_make: vMake || null,
-        vehicle_model: vModel || null,
-        vehicle_plate: vPlate || null,
-        vehicle_class: role === "driver" ? vClass : null,
-      });
+      };
+      if (role === 'driver') {
+        payload.vehicle_make = vMake.trim();
+        payload.vehicle_model = vModel.trim();
+        payload.vehicle_plate = vPlate.trim().toUpperCase();
+        payload.vehicle_class = vClass;
+      }
+
+      const { data } = await api.post('/auth/complete-profile', payload);
       setUser(data.user);
-      navigate(role === "driver" ? "/driver" : "/rider");
+      router.replace(role === 'driver' ? '/driver' : '/rider');
     } catch (e) {
-      toast.error(e.response?.data?.detail || "Failed");
+      Alert.alert('Failed', e.response?.data?.detail || 'Could not create profile. Try again.');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-white text-black px-6 py-10 max-w-md mx-auto">
-      <span className="label-eyebrow text-[#002FA7]">Step 02 / Profile</span>
-      <h1 className="font-display font-black tracking-tighter text-4xl sm:text-5xl mt-3 mb-8 leading-none">
-        Create your account.
-      </h1>
-
-      <div className="grid grid-cols-2 gap-3 mb-8">
-        <button
-          onClick={() => setRole("rider")}
-          data-testid="role-rider-btn"
-          className={`p-6 border-2 text-left transition-all ${
-            role === "rider"
-              ? "border-[#002FA7] bg-[#002FA7] text-white"
-              : "border-black bg-white text-black hover:-translate-y-[2px] hover:shadow-[4px_4px_0_0_#0A0A0A]"
-          }`}
-        >
-          <User className="w-7 h-7 mb-3" strokeWidth={2.5} />
-          <div className="font-display font-bold text-xl tracking-tight">Rider</div>
-          <div className="text-xs mt-1 opacity-80">Book taxis</div>
-        </button>
-        <button
-          onClick={() => setRole("driver")}
-          data-testid="role-driver-btn"
-          className={`p-6 border-2 text-left transition-all ${
-            role === "driver"
-              ? "border-black bg-black text-[#DFFF00]"
-              : "border-black bg-white text-black hover:-translate-y-[2px] hover:shadow-[4px_4px_0_0_#0A0A0A]"
-          }`}
-        >
-          <Car className="w-7 h-7 mb-3" strokeWidth={2.5} />
-          <div className="font-display font-bold text-xl tracking-tight">Driver</div>
-          <div className="text-xs mt-1 opacity-80">Earn locally</div>
-        </button>
-      </div>
-
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label className="label-eyebrow text-[#52525B] mb-2 block">First name</label>
-          <input
-            data-testid="onboarding-firstname-input"
-            value={firstName}
-            onChange={(e) => setFirstName(e.target.value)}
-            placeholder="Alex"
-            className="w-full px-4 py-4 text-lg font-medium border-2 border-black bg-white focus:outline-none focus:border-[#002FA7]"
-          />
-        </div>
-        <div>
-          <label className="label-eyebrow text-[#52525B] mb-2 block">Last name</label>
-          <input
-            data-testid="onboarding-lastname-input"
-            value={lastName}
-            onChange={(e) => setLastName(e.target.value)}
-            placeholder="Morgan"
-            className="w-full px-4 py-4 text-lg font-medium border-2 border-black bg-white focus:outline-none focus:border-[#002FA7]"
-          />
-        </div>
-      </div>
-
-      {role === "driver" && (
-        <div className="space-y-4 mt-6 border-t-2 border-black pt-6">
-          <span className="label-eyebrow text-[#52525B]">Vehicle details</span>
-          <div className="grid grid-cols-2 gap-3">
-            <input
-              data-testid="vehicle-make-input"
-              placeholder="Make (Toyota)"
-              value={vMake}
-              onChange={(e) => setVMake(e.target.value)}
-              className="px-3 py-3 border-2 border-black bg-white focus:outline-none focus:border-[#002FA7]"
-            />
-            <input
-              data-testid="vehicle-model-input"
-              placeholder="Model (Camry)"
-              value={vModel}
-              onChange={(e) => setVModel(e.target.value)}
-              className="px-3 py-3 border-2 border-black bg-white focus:outline-none focus:border-[#002FA7]"
-            />
-          </div>
-          <input
-            data-testid="vehicle-plate-input"
-            placeholder="License plate"
-            value={vPlate}
-            onChange={(e) => setVPlate(e.target.value.toUpperCase())}
-            className="w-full px-3 py-3 border-2 border-black bg-white focus:outline-none focus:border-[#002FA7] uppercase tracking-widest font-mono"
-          />
-          <div>
-            <span className="label-eyebrow text-[#52525B] mb-2 block">Vehicle class</span>
-            <div className="grid grid-cols-3 gap-2">
-              {["mini", "sedan", "suv"].map((c) => (
-                <button
-                  key={c}
-                  onClick={() => setVClass(c)}
-                  data-testid={`vehicle-class-${c}-btn`}
-                  className={`py-3 border-2 font-display font-bold text-sm uppercase tracking-wide transition-all ${
-                    vClass === c ? "border-[#002FA7] bg-[#002FA7] text-white" : "border-black bg-white"
-                  }`}
-                >
-                  {c}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-
-      <button
-        onClick={submit}
-        disabled={loading}
-        data-testid="onboarding-submit-btn"
-        className="mt-8 w-full py-5 bg-[#002FA7] text-white font-display font-bold text-lg tracking-tight inline-flex items-center justify-center gap-2 transition-transform hover:-translate-y-[2px] hover:shadow-[6px_6px_0_0_#0A0A0A] disabled:opacity-50"
+    <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        {loading && <Loader2 className="w-5 h-5 animate-spin" />}
-        Create account
-      </button>
-    </div>
+        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+          <Pressable onPress={() => router.back()} style={styles.backRow} testID="onboarding-back-btn">
+            <Ionicons name="chevron-back" size={18} color={colors.riderTextMuted} />
+            <Text style={styles.backText}>BACK</Text>
+          </Pressable>
+
+          <View style={styles.body}>
+            <Text style={styles.eyebrow}>STEP 02 / PROFILE</Text>
+            <Text style={styles.h1}>Create your{'\n'}account.</Text>
+
+            {/* Role selector */}
+            <View style={styles.roleRow}>
+              <Pressable
+                onPress={() => setRole('rider')}
+                testID="role-rider-btn"
+                style={[styles.roleCard, role === 'rider' && styles.roleCardActiveBlue]}
+              >
+                <Ionicons
+                  name="person"
+                  size={28}
+                  color={role === 'rider' ? colors.white : colors.black}
+                />
+                <Text style={[styles.roleLabel, role === 'rider' && { color: colors.white }]}>
+                  Rider
+                </Text>
+                <Text style={[styles.roleSub, role === 'rider' && { color: 'rgba(255,255,255,0.75)' }]}>
+                  Book taxis
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={() => setRole('driver')}
+                testID="role-driver-btn"
+                style={[styles.roleCard, role === 'driver' && styles.roleCardActiveDark]}
+              >
+                <Ionicons
+                  name="car"
+                  size={28}
+                  color={role === 'driver' ? colors.driverCta : colors.black}
+                />
+                <Text style={[styles.roleLabel, role === 'driver' && { color: colors.driverCta }]}>
+                  Driver
+                </Text>
+                <Text style={[styles.roleSub, role === 'driver' && { color: 'rgba(223,255,0,0.7)' }]}>
+                  Earn locally
+                </Text>
+              </Pressable>
+            </View>
+
+            {/* Name */}
+            <View style={styles.nameRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.fieldLabel}>FIRST NAME</Text>
+                <TextInput
+                  value={firstName}
+                  onChangeText={setFirstName}
+                  placeholder="Alex"
+                  placeholderTextColor={colors.riderTextMuted}
+                  style={styles.input}
+                  testID="onboarding-firstname-input"
+                  autoCapitalize="words"
+                />
+              </View>
+              <View style={{ width: 10 }} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.fieldLabel}>LAST NAME</Text>
+                <TextInput
+                  value={lastName}
+                  onChangeText={setLastName}
+                  placeholder="Morgan"
+                  placeholderTextColor={colors.riderTextMuted}
+                  style={styles.input}
+                  testID="onboarding-lastname-input"
+                  autoCapitalize="words"
+                />
+              </View>
+            </View>
+
+            {/* Driver vehicle fields */}
+            {role === 'driver' && (
+              <View style={styles.vehicleSection}>
+                <Text style={[styles.eyebrow, { color: colors.riderTextMuted, marginBottom: 12 }]}>
+                  VEHICLE DETAILS
+                </Text>
+                <View style={styles.nameRow}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.fieldLabel}>MAKE</Text>
+                    <TextInput
+                      value={vMake}
+                      onChangeText={setVMake}
+                      placeholder="Toyota"
+                      placeholderTextColor={colors.riderTextMuted}
+                      style={styles.input}
+                      testID="vehicle-make-input"
+                      autoCapitalize="words"
+                    />
+                  </View>
+                  <View style={{ width: 10 }} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.fieldLabel}>MODEL</Text>
+                    <TextInput
+                      value={vModel}
+                      onChangeText={setVModel}
+                      placeholder="Camry"
+                      placeholderTextColor={colors.riderTextMuted}
+                      style={styles.input}
+                      testID="vehicle-model-input"
+                      autoCapitalize="words"
+                    />
+                  </View>
+                </View>
+                <Text style={[styles.fieldLabel, { marginTop: 10 }]}>LICENSE PLATE</Text>
+                <TextInput
+                  value={vPlate}
+                  onChangeText={(v) => setVPlate(v.toUpperCase())}
+                  placeholder="AB12 CDE"
+                  placeholderTextColor={colors.riderTextMuted}
+                  style={[styles.input, { letterSpacing: 4, fontFamily: 'Menlo' }]}
+                  testID="vehicle-plate-input"
+                  autoCapitalize="characters"
+                />
+                <Text style={[styles.fieldLabel, { marginTop: 10, marginBottom: 8 }]}>VEHICLE CLASS</Text>
+                <View style={styles.classRow}>
+                  {VEHICLE_CLASSES.map((c) => (
+                    <Pressable
+                      key={c}
+                      onPress={() => setVClass(c)}
+                      testID={`vehicle-class-${c}-btn`}
+                      style={[styles.classBtn, vClass === c && styles.classBtnActive]}
+                    >
+                      <Text style={[styles.classBtnText, vClass === c && { color: colors.white }]}>
+                        {c.toUpperCase()}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
+            )}
+
+            <Pressable
+              onPress={submit}
+              disabled={loading}
+              testID="onboarding-submit-btn"
+              style={[styles.submitBtn, loading && { opacity: 0.6 }]}
+            >
+              <Text style={styles.submitText}>
+                {loading ? 'Creating…' : 'Create account'}
+              </Text>
+            </Pressable>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({
+  safe: { flex: 1, backgroundColor: colors.white },
+  scroll: { flexGrow: 1 },
+  backRow: { flexDirection: 'row', alignItems: 'center', gap: 6, padding: 24 },
+  backText: { fontSize: 11, fontWeight: '700', letterSpacing: 2, color: colors.riderTextMuted },
+  body: { paddingHorizontal: 24, paddingBottom: 40 },
+  eyebrow: { fontSize: 11, fontWeight: '700', letterSpacing: 2, color: colors.riderCta },
+  h1: {
+    fontSize: 40, fontWeight: '900', letterSpacing: -1.5,
+    lineHeight: 42, color: colors.riderText,
+    marginTop: 10, marginBottom: 28,
+  },
+  roleRow: { flexDirection: 'row', gap: 12, marginBottom: 28 },
+  roleCard: {
+    flex: 1, padding: 20,
+    borderWidth: 2, borderColor: colors.black,
+    backgroundColor: colors.white,
+  },
+  roleCardActiveBlue: { backgroundColor: colors.riderCta, borderColor: colors.riderCta },
+  roleCardActiveDark: { backgroundColor: colors.black, borderColor: colors.black },
+  roleLabel: { fontSize: 18, fontWeight: '900', letterSpacing: -0.5, marginTop: 10, color: colors.black },
+  roleSub: { fontSize: 12, color: colors.riderTextMuted, marginTop: 4 },
+  nameRow: { flexDirection: 'row', marginBottom: 4 },
+  fieldLabel: {
+    fontSize: 10, fontWeight: '700', letterSpacing: 2,
+    color: colors.riderTextMuted, marginBottom: 6,
+  },
+  input: {
+    borderWidth: 2, borderColor: colors.black,
+    paddingHorizontal: 14, paddingVertical: 14,
+    fontSize: 16, fontWeight: '600',
+    color: colors.black, backgroundColor: colors.white,
+  },
+  vehicleSection: {
+    borderTopWidth: 2, borderTopColor: colors.black,
+    paddingTop: 20, marginTop: 16,
+  },
+  classRow: { flexDirection: 'row', gap: 8 },
+  classBtn: {
+    flex: 1, paddingVertical: 12,
+    borderWidth: 2, borderColor: colors.black,
+    alignItems: 'center', backgroundColor: colors.white,
+  },
+  classBtnActive: { backgroundColor: colors.riderCta, borderColor: colors.riderCta },
+  classBtnText: { fontSize: 12, fontWeight: '800', letterSpacing: 1.5, color: colors.black },
+  submitBtn: {
+    marginTop: 32,
+    backgroundColor: colors.riderCta,
+    paddingVertical: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  submitText: { fontSize: 18, fontWeight: '900', letterSpacing: -0.5, color: colors.white },
+});

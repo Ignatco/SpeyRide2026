@@ -40,6 +40,8 @@ export function AuthProvider({ children }) {
   };
 
   return (
+    // FIX: expose setUser so Onboarding can update local state after
+    // complete-profile without requiring a full refresh round-trip
     <AuthCtx.Provider value={{ user, setUser, loading, login, logout, refresh }}>
       {children}
     </AuthCtx.Provider>
