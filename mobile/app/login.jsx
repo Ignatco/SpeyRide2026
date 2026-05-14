@@ -18,6 +18,7 @@ export default function Login() {
   const [step, setStep] = useState(1);
   const [phone, setPhone] = useState('+44');
   const [code, setCode] = useState('');
+  const [devCode, setDevCode] = useState(null); // FIX: persist dev code in state
   const [loading, setLoading] = useState(false);
 
   const send = async () => {
@@ -29,12 +30,14 @@ export default function Login() {
     try {
       const { data } = await api.post('/auth/send-otp', { phone });
       if (data.dev_code) {
+        // FIX: store dev_code in state so it stays visible on step 2
+        setDevCode(data.dev_code);
         Alert.alert('Dev OTP', `Code: ${data.dev_code}`);
+      } else {
+        setDevCode(null);
       }
       setStep(2);
     } catch (e) {
-      // Verbose logging so failures show in the Metro terminal
-      // eslint-disable-next-line no-console
       console.log('[send-otp] FAILED', {
         message: e?.message,
         code: e?.code,
@@ -90,8 +93,19 @@ export default function Login() {
             <Text style={styles.subtitle}>
               {step === 1
                 ? "We'll send a one-time SMS code to verify your line."
-                : `Sent to ${phone}. Check your messages.`}
+                : devCode
+                  // FIX: show dev code inline so user doesn't have to remember it
+                  ? `Sent to ${phone}. Dev code: ${devCode}`
+                  : `Sent to ${phone}. Check your messages.`}
             </Text>
+
+            {/* FIX: show dev code badge on step 2 if available */}
+            {step === 2 && devCode && (
+              <View style={styles.devBadge}>
+                <Ionicons name="bug-outline" size={14} color={colors.riderCta} />
+                <Text style={styles.devBadgeText}>DEV CODE: {devCode}</Text>
+              </View>
+            )}
 
             {step === 1 ? (
               <>
@@ -140,6 +154,14 @@ const styles = StyleSheet.create({
   body: { paddingHorizontal: 24, paddingTop: 24, paddingBottom: 40 },
   eyebrow: { fontSize: 11, fontWeight: '700', letterSpacing: 2, color: colors.riderCta, marginBottom: 12 },
   h1: { fontSize: 44, fontWeight: '900', letterSpacing: -1.6, lineHeight: 44, color: colors.riderText },
-  subtitle: { fontSize: 16, color: colors.riderTextMuted, marginTop: 16, marginBottom: 32 },
+  subtitle: { fontSize: 16, color: colors.riderTextMuted, marginTop: 16, marginBottom: 16 },
+  devBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: '#EEF2FF',
+    borderWidth: 1, borderColor: colors.riderCta,
+    paddingHorizontal: 12, paddingVertical: 10,
+    marginBottom: 16,
+  },
+  devBadgeText: { fontSize: 15, fontWeight: '800', letterSpacing: 2, color: colors.riderCta },
   resend: { fontSize: 14, color: colors.riderTextMuted, textDecorationLine: 'underline' },
 });
