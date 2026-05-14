@@ -3,12 +3,12 @@ import { useNavigate } from "react-router-dom";
 import { api } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import MapView from "@/components/MapView";
-import { Power, History, LogOut, Loader2, MapPin, ArrowRight, DollarSign, Star } from "lucide-react";
+import { Power, History, UserCircle, Loader2, MapPin, ArrowRight, DollarSign, Star } from "lucide-react";
 import { toast } from "sonner";
 
 export default function DriverHome() {
   const navigate = useNavigate();
-  const { user, logout, refresh } = useAuth();
+  const { user, refresh } = useAuth();
   const [online, setOnline] = useState(user?.is_online || false);
   const [loc, setLoc] = useState({ lat: user?.current_lat || 57.1959, lng: user?.current_lng || -3.829 });
   const [requests, setRequests] = useState([]);
@@ -103,11 +103,11 @@ export default function DriverHome() {
             <History className="w-5 h-5" strokeWidth={2.5} />
           </button>
           <button
-            onClick={() => { logout(); navigate("/"); }}
-            className="bg-[#18181B] border-2 border-[#27272A] p-2 hover:border-[#FF2B2B] transition-colors"
-            data-testid="driver-logout-btn"
+            onClick={() => navigate("/account")}
+            className="bg-[#18181B] border-2 border-[#27272A] p-2 hover:border-[#DFFF00] transition-colors"
+            data-testid="driver-account-btn"
           >
-            <LogOut className="w-5 h-5" strokeWidth={2.5} />
+            <UserCircle className="w-5 h-5" strokeWidth={2.5} />
           </button>
         </div>
       </div>

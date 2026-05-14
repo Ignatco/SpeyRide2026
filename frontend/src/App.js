@@ -10,6 +10,7 @@ import RiderHistory from "@/pages/RiderHistory";
 import DriverHome from "@/pages/DriverHome";
 import DriverRide from "@/pages/DriverRide";
 import DriverEarnings from "@/pages/DriverEarnings";
+import AccountSettings from "@/pages/AccountSettings";
 import { Loader2 } from "lucide-react";
 
 function Protected({ role, children }) {
@@ -25,8 +26,8 @@ function Protected({ role, children }) {
 
 function SplashLoader() {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-white">
-      <Loader2 className="w-7 h-7 animate-spin text-[#002FA7]" />
+    <div className="min-h-screen flex items-center justify-center bg-black">
+      <Loader2 className="w-7 h-7 animate-spin text-white" />
     </div>
   );
 }
@@ -45,6 +46,8 @@ function AppRoutes() {
         <Route path="/driver/ride/:id" element={<Protected role="driver"><DriverRide /></Protected>} />
         <Route path="/driver/earnings" element={<Protected role="driver"><DriverEarnings /></Protected>} />
         <Route path="/driver/history" element={<Protected role="driver"><DriverEarnings /></Protected>} />
+        {/* Account settings — accessible to both roles */}
+        <Route path="/account" element={<Protected><AccountSettings /></Protected>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>

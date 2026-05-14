@@ -9,7 +9,7 @@ import {
   Truck,
   Navigation2,
   History,
-  LogOut,
+  UserCircle,
   Loader2,
   Search,
   Route,
@@ -118,7 +118,7 @@ function AddressInput({ value, onPick, placeholder, testid, color = "#002FA7" })
 
 export default function RiderHome() {
   const navigate = useNavigate();
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
   const [pickup, setPickup] = useState(null);
   const [drop, setDrop] = useState(null);
   const [estimates, setEstimates] = useState(null);
@@ -262,11 +262,11 @@ export default function RiderHome() {
             <History className="w-5 h-5" strokeWidth={2.5} />
           </button>
           <button
-            onClick={() => { logout(); navigate("/"); }}
+            onClick={() => navigate("/account")}
             className="bg-white border-2 border-black p-2 hover:-translate-y-[2px] hover:shadow-[4px_4px_0_0_#0A0A0A] transition-all"
-            data-testid="rider-logout-btn"
+            data-testid="rider-account-btn"
           >
-            <LogOut className="w-5 h-5" strokeWidth={2.5} />
+            <UserCircle className="w-5 h-5" strokeWidth={2.5} />
           </button>
         </div>
       </div>
