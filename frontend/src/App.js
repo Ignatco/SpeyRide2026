@@ -13,17 +13,6 @@ import DriverEarnings from "@/pages/DriverEarnings";
 import AccountSettings from "@/pages/AccountSettings";
 import { Loader2 } from "lucide-react";
 
-function Protected({ role, children }) {
-  const { user, loading } = useAuth();
-  if (loading) return <SplashLoader />;
-  if (!user) return <Navigate to="/login" replace />;
-  if (!user.role || !user.first_name) return <Navigate to="/onboarding" replace />;
-  if (role && user.role !== role) {
-    return <Navigate to={user.role === "driver" ? "/driver" : "/rider"} replace />;
-  }
-  return children;
-}
-
 function SplashLoader() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-black">
@@ -32,22 +21,46 @@ function SplashLoader() {
   );
 }
 
+// Requires login only — no role or name required (new users can skip onboarding)
+function RequireAuth({ children }) {
+  const { user, loading } = useAuth();
+  if (loading) return <SplashLoader />;
+  if (!user) return <Navigate to="/login" replace />;
+  return children;
+}
+
+// Requires login AND a specific role
+function RequireRole({ role, children }) {
+  const { user, loading } = useAuth();
+  if (loading) return <SplashLoader />;
+  if (!user) return <Navigate to="/login" replace />;
+  if (user.role && user.role !== role)
+    return <Navigate to={user.role === "driver" ? "/driver" : "/rider"} replace />;
+  return children;
+}
+
 function AppRoutes() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<Landing />} />
-        <Route path="/login" element={<Login />} />
+        <Route path="/"           element={<Landing />} />
+        <Route path="/login"      element={<Login />} />
         <Route path="/onboarding" element={<Onboarding />} />
-        <Route path="/rider" element={<Protected role="rider"><RiderHome /></Protected>} />
-        <Route path="/rider/ride/:id" element={<Protected role="rider"><RiderRide /></Protected>} />
-        <Route path="/rider/history" element={<Protected role="rider"><RiderHistory /></Protected>} />
-        <Route path="/driver" element={<Protected role="driver"><DriverHome /></Protected>} />
-        <Route path="/driver/ride/:id" element={<Protected role="driver"><DriverRide /></Protected>} />
-        <Route path="/driver/earnings" element={<Protected role="driver"><DriverEarnings /></Protected>} />
-        <Route path="/driver/history" element={<Protected role="driver"><DriverEarnings /></Protected>} />
-        {/* Account settings — accessible to both roles */}
-        <Route path="/account" element={<Protected><AccountSettings /></Protected>} />
+
+        {/* Rider — any logged-in user can be a rider (default role) */}
+        <Route path="/rider"           element={<RequireAuth><RiderHome /></RequireAuth>} />
+        <Route path="/rider/ride/:id"  element={<RequireAuth><RiderRide /></RequireAuth>} />
+        <Route path="/rider/history"   element={<RequireAuth><RiderHistory /></RequireAuth>} />
+
+        {/* Driver — must have driver role */}
+        <Route path="/driver"           element={<RequireRole role="driver"><DriverHome /></RequireRole>} />
+        <Route path="/driver/ride/:id"  element={<RequireRole role="driver"><DriverRide /></RequireRole>} />
+        <Route path="/driver/earnings"  element={<RequireRole role="driver"><DriverEarnings /></RequireRole>} />
+        <Route path="/driver/history"   element={<RequireRole role="driver"><DriverEarnings /></RequireRole>} />
+
+        {/* Account — any logged-in user */}
+        <Route path="/account" element={<RequireAuth><AccountSettings /></RequireAuth>} />
+
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>

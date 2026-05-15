@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
-import { Car, User, Loader2 } from "lucide-react";
+import { Loader2, X } from "lucide-react";
 import { toast } from "sonner";
 
 export default function Onboarding() {
@@ -10,175 +10,112 @@ export default function Onboarding() {
   const navigate = useNavigate();
   const { setUser } = useAuth();
 
-  const [role, setRole] = useState(params.get("role") || "");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
-  const [vMake, setVMake] = useState("");
-  const [vModel, setVModel] = useState("");
-  const [vPlate, setVPlate] = useState("");
-  const [vClass, setVClass] = useState("sedan");
+  const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const submit = async () => {
-    if (!role) return toast.error("Choose Rider or Driver");
-    if (!firstName.trim()) return toast.error("Enter first name");
-    if (!lastName.trim()) return toast.error("Enter last name");
-    if (role === "driver") {
-      if (!vMake.trim()) return toast.error("Enter vehicle make");
-      if (!vModel.trim()) return toast.error("Enter vehicle model");
-      if (!vPlate.trim()) return toast.error("Enter license plate");
-    }
+  // Skip: go straight to rider home without saving anything
+  const skip = () => navigate("/rider");
+
+  const save = async () => {
+    if (!firstName.trim()) return toast.error("Enter your first name");
     setLoading(true);
     try {
-      const payload = {
+      const { data } = await api.patch("/auth/profile", {
         first_name: firstName.trim(),
-        last_name: lastName.trim(),
-        role,
-      };
-      if (role === "driver") {
-        payload.vehicle_make = vMake.trim();
-        payload.vehicle_model = vModel.trim();
-        payload.vehicle_plate = vPlate.trim().toUpperCase();
-        payload.vehicle_class = vClass;
-      }
-      const { data } = await api.post("/auth/complete-profile", payload);
+        last_name: lastName.trim() || null,
+        email: email.trim() || null,
+      });
       setUser(data.user);
-      navigate(role === "driver" ? "/driver" : "/rider");
+      navigate("/rider");
     } catch (e) {
-      toast.error(e.response?.data?.detail || "Failed to create profile");
+      toast.error(e.response?.data?.detail || "Failed to save");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-white text-black px-6 py-10 max-w-md mx-auto">
-      <span className="label-eyebrow text-[#002FA7]">Step 02 / Profile</span>
-      <h1 className="font-display font-black tracking-tighter text-4xl sm:text-5xl mt-3 mb-8 leading-none">
-        Create your account.
-      </h1>
-
-      {/* Role selector */}
-      <div className="grid grid-cols-2 gap-3 mb-8">
+    <div className="min-h-screen bg-white flex flex-col">
+      {/* Skip button — top right */}
+      <div className="px-5 pt-5 flex justify-end">
         <button
-          onClick={() => setRole("rider")}
-          data-testid="role-rider-btn"
-          className={`p-6 border-2 text-left transition-all ${
-            role === "rider"
-              ? "border-[#002FA7] bg-[#002FA7] text-white"
-              : "border-black bg-white text-black hover:-translate-y-[2px] hover:shadow-[4px_4px_0_0_#0A0A0A]"
-          }`}
+          onClick={skip}
+          data-testid="onboarding-skip-btn"
+          className="flex items-center gap-1 text-sm text-[#52525B] hover:text-black font-medium"
         >
-          <User className="w-7 h-7 mb-3" strokeWidth={2.5} />
-          <div className="font-display font-bold text-xl tracking-tight">Rider</div>
-          <div className="text-xs mt-1 opacity-80">Book taxis</div>
-        </button>
-        <button
-          onClick={() => setRole("driver")}
-          data-testid="role-driver-btn"
-          className={`p-6 border-2 text-left transition-all ${
-            role === "driver"
-              ? "border-black bg-black text-[#DFFF00]"
-              : "border-black bg-white text-black hover:-translate-y-[2px] hover:shadow-[4px_4px_0_0_#0A0A0A]"
-          }`}
-        >
-          <Car className="w-7 h-7 mb-3" strokeWidth={2.5} />
-          <div className="font-display font-bold text-xl tracking-tight">Driver</div>
-          <div className="text-xs mt-1 opacity-80">Earn locally</div>
+          Skip <X className="w-4 h-4" />
         </button>
       </div>
 
-      {/* Name fields */}
-      <div className="grid grid-cols-2 gap-3 mb-4">
-        <div>
-          <label className="label-eyebrow text-[#52525B] mb-2 block">First name</label>
-          <input
-            data-testid="onboarding-firstname-input"
-            value={firstName}
-            onChange={(e) => setFirstName(e.target.value)}
-            placeholder="Alex"
-            className="w-full px-4 py-4 text-lg font-medium border-2 border-black bg-white focus:outline-none focus:border-[#002FA7]"
-          />
-        </div>
-        <div>
-          <label className="label-eyebrow text-[#52525B] mb-2 block">Last name</label>
-          <input
-            data-testid="onboarding-lastname-input"
-            value={lastName}
-            onChange={(e) => setLastName(e.target.value)}
-            placeholder="Morgan"
-            className="w-full px-4 py-4 text-lg font-medium border-2 border-black bg-white focus:outline-none focus:border-[#002FA7]"
-          />
-        </div>
+      <div className="flex-1 px-6 flex flex-col justify-center max-w-sm mx-auto w-full pb-16">
+        <h1 className="text-3xl font-black tracking-tight mb-1">
+          What's your name?
+        </h1>
+        <p className="text-sm text-[#52525B] mb-8">
+          You can always update this later in settings.
+        </p>
+
+        {/* First name */}
+        <label className="text-xs font-bold text-[#52525B] uppercase tracking-widest mb-2 block">
+          First name
+        </label>
+        <input
+          data-testid="onboarding-firstname-input"
+          value={firstName}
+          onChange={(e) => setFirstName(e.target.value)}
+          placeholder="Alex"
+          className="w-full px-4 py-4 text-lg font-medium border-2 border-black bg-white
+                     focus:outline-none mb-4"
+        />
+
+        {/* Last name */}
+        <label className="text-xs font-bold text-[#52525B] uppercase tracking-widest mb-2 block">
+          Last name <span className="text-[#A1A1AA] normal-case font-normal">(optional)</span>
+        </label>
+        <input
+          data-testid="onboarding-lastname-input"
+          value={lastName}
+          onChange={(e) => setLastName(e.target.value)}
+          placeholder="Morgan"
+          className="w-full px-4 py-4 text-lg font-medium border-2 border-[#E4E4E7] bg-white
+                     focus:outline-none focus:border-black mb-4"
+        />
+
+        {/* Email */}
+        <label className="text-xs font-bold text-[#52525B] uppercase tracking-widest mb-2 block">
+          Email <span className="text-[#A1A1AA] normal-case font-normal">(optional)</span>
+        </label>
+        <input
+          data-testid="onboarding-email-input"
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="alex@example.com"
+          className="w-full px-4 py-4 text-lg font-medium border-2 border-[#E4E4E7] bg-white
+                     focus:outline-none focus:border-black mb-6"
+        />
+
+        <button
+          onClick={save}
+          disabled={loading}
+          data-testid="onboarding-submit-btn"
+          className="w-full py-4 bg-black text-white font-bold text-base
+                     flex items-center justify-center gap-2 disabled:opacity-50
+                     active:scale-[0.98] transition-transform"
+        >
+          {loading && <Loader2 className="w-4 h-4 animate-spin" />}
+          Continue
+        </button>
+
+        <button
+          onClick={skip}
+          className="mt-3 text-sm text-[#52525B] hover:text-black underline underline-offset-4 text-center"
+        >
+          Skip for now
+        </button>
       </div>
-
-      {/* Driver vehicle fields */}
-      {role === "driver" && (
-        <div className="space-y-4 mt-2 border-t-2 border-black pt-6">
-          <span className="label-eyebrow text-[#52525B]">Vehicle details</span>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="label-eyebrow text-[#52525B] mb-2 block">Make</label>
-              <input
-                data-testid="vehicle-make-input"
-                placeholder="Toyota"
-                value={vMake}
-                onChange={(e) => setVMake(e.target.value)}
-                className="w-full px-3 py-3 border-2 border-black bg-white focus:outline-none focus:border-[#002FA7]"
-              />
-            </div>
-            <div>
-              <label className="label-eyebrow text-[#52525B] mb-2 block">Model</label>
-              <input
-                data-testid="vehicle-model-input"
-                placeholder="Camry"
-                value={vModel}
-                onChange={(e) => setVModel(e.target.value)}
-                className="w-full px-3 py-3 border-2 border-black bg-white focus:outline-none focus:border-[#002FA7]"
-              />
-            </div>
-          </div>
-          <div>
-            <label className="label-eyebrow text-[#52525B] mb-2 block">License plate</label>
-            <input
-              data-testid="vehicle-plate-input"
-              placeholder="AB12 CDE"
-              value={vPlate}
-              onChange={(e) => setVPlate(e.target.value.toUpperCase())}
-              className="w-full px-3 py-3 border-2 border-black bg-white focus:outline-none focus:border-[#002FA7] uppercase tracking-widest font-mono"
-            />
-          </div>
-          <div>
-            <span className="label-eyebrow text-[#52525B] mb-2 block">Vehicle class</span>
-            <div className="grid grid-cols-3 gap-2">
-              {["mini", "sedan", "suv"].map((c) => (
-                <button
-                  key={c}
-                  onClick={() => setVClass(c)}
-                  data-testid={`vehicle-class-${c}-btn`}
-                  className={`py-3 border-2 font-display font-bold text-sm uppercase tracking-wide transition-all ${
-                    vClass === c
-                      ? "border-[#002FA7] bg-[#002FA7] text-white"
-                      : "border-black bg-white hover:border-[#002FA7]"
-                  }`}
-                >
-                  {c}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-
-      <button
-        onClick={submit}
-        disabled={loading}
-        data-testid="onboarding-submit-btn"
-        className="mt-8 w-full py-5 bg-[#002FA7] text-white font-display font-bold text-lg tracking-tight inline-flex items-center justify-center gap-2 transition-transform hover:-translate-y-[2px] hover:shadow-[6px_6px_0_0_#0A0A0A] disabled:opacity-50"
-      >
-        {loading && <Loader2 className="w-5 h-5 animate-spin" />}
-        Create account
-      </button>
     </div>
   );
 }

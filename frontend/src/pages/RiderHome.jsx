@@ -250,7 +250,7 @@ export default function RiderHome() {
         >
           <div className="label-eyebrow text-[#52525B]">Hello</div>
           <div className="font-display font-bold text-sm tracking-tight">
-            {user?.name || "Rider"}
+            {user?.name || user?.phone || "Rider"}
           </div>
         </div>
         <div className="flex gap-2 pointer-events-auto">
@@ -356,18 +356,23 @@ export default function RiderHome() {
             </div>
 
             <div className="grid grid-cols-2 gap-2 mb-4">
-              {["cash", "stripe"].map((m) => (
+              {[
+                { id: "cash",       label: "Cash" },
+                { id: "apple_pay",  label: "🍎 Apple Pay" },
+                { id: "google_pay", label: "G Pay" },
+                { id: "stripe",     label: "💳 Card" },
+              ].map((m) => (
                 <button
-                  key={m}
-                  onClick={() => setPaymentMethod(m)}
-                  data-testid={`payment-${m}-btn`}
+                  key={m.id}
+                  onClick={() => setPaymentMethod(m.id)}
+                  data-testid={`payment-${m.id}-btn`}
                   className={`py-2.5 border-2 font-display font-bold text-sm uppercase tracking-wide transition-all ${
-                    paymentMethod === m
+                    paymentMethod === m.id
                       ? "border-black bg-black text-white"
                       : "border-black bg-white"
                   }`}
                 >
-                  {m === "cash" ? "Cash" : "Card · Stripe"}
+                  {m.label}
                 </button>
               ))}
             </div>
@@ -388,8 +393,7 @@ export default function RiderHome() {
               ) : (
                 <Navigation2 className="w-5 h-5" strokeWidth={2.5} />
               )}
-              Confirm {VEHICLES.find((x) => x.id === vehicle).label} · £
-              {estimates.estimates[vehicle].fare.toFixed(2)}
+              Confirm {VEHICLES.find((x) => x.id === vehicle).label} · £{estimates.estimates[vehicle].fare.toFixed(2)}
             </button>
           </>
         )}
