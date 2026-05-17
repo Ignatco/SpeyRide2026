@@ -11,7 +11,7 @@ import { colors } from '../../lib/theme';
 
 export default function DriverHome() {
   const router = useRouter();
-  const { user, logout, refresh } = useAuth();
+  const { user, refresh } = useAuth();
   const [online, setOnline] = useState(user?.is_online || false);
   const [loc, setLoc] = useState({ lat: 57.1959, lng: -3.829 });
   const [requests, setRequests] = useState([]);
@@ -87,7 +87,7 @@ export default function DriverHome() {
           <View style={{ flexDirection: 'row', gap: 6 }}>
             <DarkIconBtn icon="cash-outline" onPress={() => router.push('/driver/earnings')} testID="driver-earnings-btn" />
             <DarkIconBtn icon="time-outline" onPress={() => router.push('/driver/earnings')} testID="driver-history-btn" />
-            <DarkIconBtn icon="log-out-outline" onPress={async () => { await logout(); router.replace('/'); }} danger testID="driver-logout-btn" />
+            <DarkIconBtn icon="person-circle-outline" onPress={() => router.push('/account')} testID="driver-account-btn" />
           </View>
         </View>
 

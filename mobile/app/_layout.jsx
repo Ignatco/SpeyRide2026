@@ -3,7 +3,7 @@ import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider } from '../context/AuthContext';
-import '../lib/locationTask'; // register background task
+import '../lib/locationTask';
 
 export default function RootLayout() {
   return (
@@ -15,6 +15,7 @@ export default function RootLayout() {
             <Stack.Screen name="index" />
             <Stack.Screen name="login" />
             <Stack.Screen name="onboarding" />
+            <Stack.Screen name="account" />
             <Stack.Screen name="rider/index" />
             <Stack.Screen name="rider/ride/[id]" />
             <Stack.Screen name="rider/history" />
