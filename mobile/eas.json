@@ -12,8 +12,11 @@
         "simulator": false,
         "resourceClass": "m-medium"
       },
+      "android": {
+        "buildType": "apk"
+      },
       "env": {
-        "EXPO_PUBLIC_BACKEND_URL": "https://ride-ready-13.preview.emergentagent.com"
+        "EXPO_PUBLIC_BACKEND_URL": "https://YOUR_BACKEND_URL_HERE"
       }
     },
     "preview": {
@@ -22,8 +25,11 @@
       "ios": {
         "resourceClass": "m-medium"
       },
+      "android": {
+        "buildType": "apk"
+      },
       "env": {
-        "EXPO_PUBLIC_BACKEND_URL": "https://ride-ready-13.preview.emergentagent.com"
+        "EXPO_PUBLIC_BACKEND_URL": "https://YOUR_BACKEND_URL_HERE"
       }
     },
     "production": {
@@ -32,8 +38,11 @@
       "ios": {
         "resourceClass": "m-medium"
       },
+      "android": {
+        "buildType": "app-bundle"
+      },
       "env": {
-        "EXPO_PUBLIC_BACKEND_URL": "https://ride-ready-13.preview.emergentagent.com"
+        "EXPO_PUBLIC_BACKEND_URL": "https://YOUR_BACKEND_URL_HERE"
       }
     }
   },
